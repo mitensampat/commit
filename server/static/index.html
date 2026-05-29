@@ -1229,9 +1229,217 @@
         .screen.active {
             animation: fadeIn 0.3s ease-out;
         }
+
+        /* ══════════════════════════════════════
+           ONBOARDING
+           ══════════════════════════════════════ */
+        .onboarding-screen {
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+        }
+        .onboarding-container {
+            max-width: 440px;
+            width: 100%;
+            text-align: center;
+        }
+        .onboarding-slides {
+            position: relative;
+            overflow: hidden;
+        }
+        .onboarding-slide {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+        .onboarding-slide.active { display: flex; animation: fadeIn 0.35s ease-out; }
+        .onboarding-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+        .onboarding-icon svg { width: 24px; height: 24px; color: var(--ink); }
+        .onboarding-title {
+            font-family: var(--font-display);
+            font-size: 26px;
+            font-weight: 400;
+            color: var(--ink);
+            margin-bottom: 10px;
+            letter-spacing: -0.02em;
+        }
+        .onboarding-desc {
+            font-size: 14px;
+            color: var(--ink-secondary);
+            line-height: 1.65;
+            margin-bottom: 28px;
+            max-width: 380px;
+        }
+        .onboarding-features {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            text-align: left;
+            width: 100%;
+            margin-bottom: 28px;
+        }
+        .onboarding-feature {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+        }
+        .onboarding-feature-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: var(--surface-sunken);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .onboarding-feature-icon svg { width: 16px; height: 16px; color: var(--ink-secondary); }
+        .onboarding-feature-text h4 {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--ink);
+            margin-bottom: 2px;
+        }
+        .onboarding-feature-text p {
+            font-size: 12px;
+            color: var(--ink-tertiary);
+            line-height: 1.5;
+        }
+        .onboarding-dots {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .onboarding-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--line);
+            transition: background 0.2s;
+        }
+        .onboarding-dot.active { background: var(--ink); }
+        .onboarding-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .btn-onboarding {
+            padding: 10px 24px;
+            font-family: var(--font-body);
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn-onboarding:hover { opacity: 0.85; }
+        .btn-onboarding-primary {
+            background: var(--ink);
+            color: var(--canvas);
+            border: none;
+        }
+        .btn-onboarding-secondary {
+            background: transparent;
+            color: var(--ink-tertiary);
+            border: 1px solid var(--line);
+        }
     </style>
 </head>
 <body>
+
+    <!-- ══════ ONBOARDING ══════ -->
+    <div class="screen onboarding-screen" id="screen-onboarding">
+        <div class="onboarding-container">
+            <div class="onboarding-slides">
+
+                <!-- Slide 1: Welcome -->
+                <div class="onboarding-slide active" data-slide="0">
+                    <div class="onboarding-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0H4m8-9v4"/></svg>
+                    </div>
+                    <div class="onboarding-title">Welcome to Owe</div>
+                    <div class="onboarding-desc">
+                        Every conversation has promises buried in it. Owe finds them, tracks them, and closes them when they're done.
+                    </div>
+                </div>
+
+                <!-- Slide 2: How it works -->
+                <div class="onboarding-slide" data-slide="1">
+                    <div class="onboarding-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                    </div>
+                    <div class="onboarding-title">How it works</div>
+                    <div class="onboarding-features">
+                        <div class="onboarding-feature">
+                            <div class="onboarding-feature-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                            </div>
+                            <div class="onboarding-feature-text">
+                                <h4>Reads your chats</h4>
+                                <p>Connects to WhatsApp and scans conversations for commitments.</p>
+                            </div>
+                        </div>
+                        <div class="onboarding-feature">
+                            <div class="onboarding-feature-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            </div>
+                            <div class="onboarding-feature-text">
+                                <h4>Extracts automatically</h4>
+                                <p>Uses Claude to find who promised what, with the original quote.</p>
+                            </div>
+                        </div>
+                        <div class="onboarding-feature">
+                            <div class="onboarding-feature-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </div>
+                            <div class="onboarding-feature-text">
+                                <h4>Auto-resolves</h4>
+                                <p>When a commitment is fulfilled in the conversation, Owe marks it done.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Slide 3: Privacy -->
+                <div class="onboarding-slide" data-slide="2">
+                    <div class="onboarding-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <div class="onboarding-title">Your data stays yours</div>
+                    <div class="onboarding-desc">
+                        Owe runs entirely on your machine. Messages are decrypted locally. Only small snippets are sent to Claude for analysis — then forgotten. No cloud storage. No training. No human review.
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="onboarding-dots">
+                <div class="onboarding-dot active" data-dot="0"></div>
+                <div class="onboarding-dot" data-dot="1"></div>
+                <div class="onboarding-dot" data-dot="2"></div>
+            </div>
+
+            <div class="onboarding-actions">
+                <button class="btn-onboarding btn-onboarding-secondary" id="onboarding-skip">Skip</button>
+                <button class="btn-onboarding btn-onboarding-primary" id="onboarding-next">Next</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ══════ SCREEN 0: Lock Screen ══════ -->
     <div class="screen setup-screen" id="screen-lock">
@@ -1324,7 +1532,7 @@
     <!-- ══════ SCREEN 3: Connecting ══════ -->
     <div class="screen connecting-screen" id="screen-connecting">
         <div class="connecting-container">
-            <div class="setup-logo" style="margin-bottom: 32px;">Commit</div>
+            <div class="setup-logo" style="margin-bottom: 32px;">Owe</div>
             <div class="connecting-spinner"></div>
             <div class="connecting-title">Connecting to WhatsApp</div>
             <div class="connecting-desc">Syncing your conversations and starting to listen for commitments. This usually takes a few seconds.</div>
@@ -1449,6 +1657,34 @@
             document.getElementById(id).classList.add('active');
         }
 
+        // ── Onboarding slides ──
+        let onboardingSlide = 0;
+        const totalSlides = 3;
+
+        function showSlide(idx) {
+            onboardingSlide = idx;
+            document.querySelectorAll('.onboarding-slide').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.onboarding-dot').forEach(d => d.classList.remove('active'));
+            document.querySelector(`.onboarding-slide[data-slide="${idx}"]`).classList.add('active');
+            document.querySelector(`.onboarding-dot[data-dot="${idx}"]`).classList.add('active');
+            const nextBtn = document.getElementById('onboarding-next');
+            nextBtn.textContent = idx === totalSlides - 1 ? 'Get started' : 'Next';
+        }
+
+        document.getElementById('onboarding-next').addEventListener('click', () => {
+            if (onboardingSlide < totalSlides - 1) {
+                showSlide(onboardingSlide + 1);
+            } else {
+                localStorage.setItem('owe_onboarded', '1');
+                goToScreen('screen-setup');
+            }
+        });
+
+        document.getElementById('onboarding-skip').addEventListener('click', () => {
+            localStorage.setItem('owe_onboarded', '1');
+            goToScreen('screen-setup');
+        });
+
         // ── Init: check auth then status ──
         async function init() {
             try {
@@ -1460,7 +1696,11 @@
                 }
                 await routeToApp();
             } catch {
-                goToScreen('screen-setup');
+                if (!localStorage.getItem('owe_onboarded')) {
+                    goToScreen('screen-onboarding');
+                } else {
+                    goToScreen('screen-setup');
+                }
             }
         }
 
