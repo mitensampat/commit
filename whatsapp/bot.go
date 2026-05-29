@@ -180,7 +180,7 @@ func (c *Client) cmdSearch(query string) string {
 }
 
 func (c *Client) cmdHelp() string {
-	return `*Owe Bot Commands:*
+	return `*Commit Bot Commands:*
 
 commitments — list all open commitments
 owe @person — what you owe someone

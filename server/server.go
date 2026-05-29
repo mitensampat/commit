@@ -92,7 +92,7 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
-		cookie, err := r.Cookie("owe_session")
+		cookie, err := r.Cookie("commit_session")
 		if err != nil {
 			http.Error(w, "unauthorized", 401)
 			return
@@ -109,7 +109,7 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 	hasPasscode := s.db.HasPasscode()
 	authenticated := false
 	if hasPasscode {
-		if cookie, err := r.Cookie("owe_session"); err == nil {
+		if cookie, err := r.Cookie("commit_session"); err == nil {
 			_, authenticated = s.sessions.Load(cookie.Value)
 		}
 	} else {
@@ -154,7 +154,7 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 
 	token := s.generateSession()
 	http.SetCookie(w, &http.Cookie{
-		Name:     "owe_session",
+		Name:     "commit_session",
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
@@ -182,7 +182,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 
 	token := s.generateSession()
 	http.SetCookie(w, &http.Cookie{
-		Name:     "owe_session",
+		Name:     "commit_session",
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
