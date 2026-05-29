@@ -59,7 +59,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen on %s: %v", addr, err)
 	}
-	log.Printf("Owe running at http://%s", addr)
+	log.Printf("Commit running at http://%s", addr)
 
 	if err := srv.Serve(ctx, ln); err != nil {
 		log.Fatalf("server error: %v", err)
