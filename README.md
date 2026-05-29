@@ -12,23 +12,32 @@ Commit connects to WhatsApp via the multi-device API, uses Claude to understand 
 
 Everything runs locally on your machine. Messages are decrypted on-device. Only small message snippets are sent to the Claude API for analysis — nothing is stored remotely.
 
-## Requirements
+## Install
 
-- Go 1.22+
-- A [Claude API key](https://console.anthropic.com/) (Anthropic)
-- WhatsApp account with multi-device support
+### Mac (DMG)
 
-## Setup
+Download `Commit-x.x.x.dmg` from [Releases](https://github.com/mitensampat/commit/releases), open it, and drag Commit to Applications. Then run:
 
 ```bash
-# Clone and build
+/Applications/Commit.app/Contents/MacOS/Commit
+```
+
+### Windows
+
+Download `Commit-x.x.x-windows-amd64.zip` from [Releases](https://github.com/mitensampat/commit/releases), extract it, and run `Commit.exe`.
+
+### From source
+
+Requires Go 1.22+ and a [Claude API key](https://console.anthropic.com/).
+
+```bash
 git clone https://github.com/mitensampat/commit.git
 cd commit
 go build -o commit .
-
-# Run
 ./commit
 ```
+
+## Setup
 
 Open [http://localhost:9384](http://localhost:9384) in your browser. The setup wizard will walk you through:
 
@@ -65,6 +74,24 @@ landing/             — marketing landing page
 Data is stored in `~/.commit/`:
 - `commit.db` — SQLite database (messages, commitments, settings)
 - WhatsApp session files
+
+## Building releases
+
+```bash
+# Mac DMG (ad-hoc signed, for local testing)
+./scripts/build-mac.sh
+
+# Mac DMG (signed + notarized, for distribution)
+DEVELOPER_ID="Developer ID Application: ..." \
+NOTARY_PROFILE="commit-notary" \
+./scripts/build-mac.sh
+
+# Windows zip
+./scripts/build-windows.sh
+
+# Both platforms
+./scripts/build-all.sh
+```
 
 ## Privacy
 
