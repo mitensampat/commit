@@ -27,11 +27,18 @@ Everything runs locally on your machine. Messages are decrypted on-device and st
 - **Mobile web** — the dashboard is fully responsive. Access it from your phone's browser at the same local address.
 - **Passcode protection** — the web interface is secured with a passcode. Your Claude API key is encrypted with AES-GCM on disk.
 
+## System requirements
+
+- **macOS** 12 Monterey or later (Apple Silicon or Intel)
+- **Windows** 10 or later (64-bit)
+- A [Claude API key](https://console.anthropic.com/) (Anthropic account required)
+- WhatsApp account with multi-device support
+
 ## Install
 
 ### Mac (DMG)
 
-Download `Commit-x.x.x.dmg` from [Releases](https://github.com/mitensampat/commit/releases), open it, and drag Commit to Applications. Then run:
+Download `Commit-x.x.x.dmg` from Releases, open it, and drag Commit to Applications. Then run:
 
 ```bash
 /Applications/Commit.app/Contents/MacOS/Commit
@@ -39,7 +46,7 @@ Download `Commit-x.x.x.dmg` from [Releases](https://github.com/mitensampat/commi
 
 ### Windows
 
-Download `Commit-x.x.x-windows-amd64.zip` from [Releases](https://github.com/mitensampat/commit/releases), extract it, and run `Commit.exe`.
+Download `Commit-x.x.x-windows-amd64.zip` from Releases, extract it, and run `Commit.exe`.
 
 ### From source
 
@@ -117,6 +124,11 @@ NOTARY_PROFILE="commit-notary" \
 - No cloud storage, no telemetry, no tracking by Commit
 - Your WhatsApp linked device session persists until you unlink it from your phone (Settings → Linked Devices) — even if Commit is not running, messages will queue for the next session
 - To fully remove Commit: unlink the device from WhatsApp, delete the app, and delete `~/.commit/`
+
+## Third-party services
+
+- **Claude API** (Anthropic) — commitment extraction from message content
+- **Formspree** — landing page waitlist form submission (landing page only, not the app)
 
 ## License
 

@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"sync"
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/pbkdf2"
@@ -18,6 +19,7 @@ import (
 
 type DB struct {
 	conn      *sql.DB
+	cryptoMu  sync.RWMutex
 	cryptoKey []byte // derived from passcode, set after auth
 }
 
@@ -31,6 +33,7 @@ func Open(path string) (*DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	db.ensureMachineKey()
 	return db, nil
 }
 
@@ -161,18 +164,48 @@ func (db *DB) deriveKey(passcode string) {
 	if len(salt) == 0 {
 		salt = []byte("commit-default-salt")
 	}
-	db.cryptoKey = pbkdf2.Key([]byte(passcode), salt, 100000, 32, sha256.New)
+	key := pbkdf2.Key([]byte(passcode), salt, 100000, 32, sha256.New)
+	db.cryptoMu.Lock()
+	db.cryptoKey = key
+	db.cryptoMu.Unlock()
+}
+
+func (db *DB) ensureMachineKey() {
+	if db.HasPasscode() {
+		return
+	}
+	existing := db.GetSetting("machine_key")
+	if existing != "" {
+		key, _ := hex.DecodeString(existing)
+		if len(key) == 32 {
+			db.cryptoMu.Lock()
+			db.cryptoKey = key
+			db.cryptoMu.Unlock()
+			return
+		}
+	}
+	key := make([]byte, 32)
+	io.ReadFull(rand.Reader, key)
+	db.SetSetting("machine_key", hex.EncodeToString(key))
+	db.cryptoMu.Lock()
+	db.cryptoKey = key
+	db.cryptoMu.Unlock()
 }
 
 func (db *DB) IsUnlocked() bool {
+	db.cryptoMu.RLock()
+	defer db.cryptoMu.RUnlock()
 	return len(db.cryptoKey) > 0
 }
 
 func (db *DB) encrypt(plaintext string) (string, error) {
-	if len(db.cryptoKey) == 0 {
+	db.cryptoMu.RLock()
+	key := db.cryptoKey
+	db.cryptoMu.RUnlock()
+	if len(key) == 0 {
 		return plaintext, nil
 	}
-	block, err := aes.NewCipher(db.cryptoKey)
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", err
 	}
@@ -189,14 +222,17 @@ func (db *DB) encrypt(plaintext string) (string, error) {
 }
 
 func (db *DB) decrypt(stored string) (string, error) {
-	if len(db.cryptoKey) == 0 || len(stored) < 4 || stored[:4] != "enc:" {
+	db.cryptoMu.RLock()
+	key := db.cryptoKey
+	db.cryptoMu.RUnlock()
+	if len(key) == 0 || len(stored) < 4 || stored[:4] != "enc:" {
 		return stored, nil
 	}
 	data, err := hex.DecodeString(stored[4:])
 	if err != nil {
 		return "", err
 	}
-	block, err := aes.NewCipher(db.cryptoKey)
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", err
 	}

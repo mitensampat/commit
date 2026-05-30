@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -18,6 +20,7 @@ import (
 	"github.com/msfoundry/commit/store"
 	"github.com/msfoundry/commit/whatsapp"
 
+	qrcode "github.com/skip2/go-qrcode"
 	waTypes "go.mau.fi/whatsmeow/types"
 )
 
@@ -25,13 +28,19 @@ import (
 var staticFS embed.FS
 
 type Server struct {
-	db        *store.DB
-	wa        *whatsapp.Client
-	extractor *extraction.Extractor
-	port      int
-	mux       *http.ServeMux
-	sessions  sync.Map // token -> bool
-	startedAt time.Time
+	db           *store.DB
+	wa           *whatsapp.Client
+	extractor    *extraction.Extractor
+	port         int
+	mux          *http.ServeMux
+	sessions     sync.Map // token -> expiry time
+	startedAt    time.Time
+	loginAttempts sync.Map // ip -> *loginThrottle
+}
+
+type loginThrottle struct {
+	failures int
+	lastFail time.Time
 }
 
 func New(db *store.DB, wa *whatsapp.Client, ext *extraction.Extractor, port int) *Server {
@@ -45,7 +54,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	srv := &http.Server{Handler: s.mux}
 	go func() {
 		<-ctx.Done()
-		srv.Close()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		srv.Shutdown(shutdownCtx)
 	}()
 	err := srv.Serve(ln)
 	if err == http.ErrServerClosed {
@@ -59,6 +70,7 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/", http.FileServer(http.FS(staticSub)))
 
 	// Public (no auth required)
+	s.mux.HandleFunc("/api/qr", s.handleQR)
 	s.mux.HandleFunc("/api/status", s.handleStatus)
 	s.mux.HandleFunc("/api/auth/check", s.handleAuthCheck)
 	s.mux.HandleFunc("/api/auth/login", s.handleAuthLogin)
@@ -82,6 +94,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/commitments/remind", s.requireAuth(s.handleSetReminder))
 	s.mux.HandleFunc("/api/local-ip", s.requireAuth(s.handleLocalIP))
 	s.mux.HandleFunc("/api/user-name", s.requireAuth(s.handleUserName))
+	s.mux.HandleFunc("/api/setup/validate", s.requireAuth(s.handleValidateKey))
+	s.mux.HandleFunc("/api/setup/update-key", s.requireAuth(s.handleUpdateKey))
 	s.mux.HandleFunc("/api/debug", s.requireAuth(s.handleDebug))
 	s.mux.HandleFunc("/api/logout", s.requireAuth(s.handleLogout))
 }
@@ -90,7 +104,7 @@ func (s *Server) generateSession() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
-	s.sessions.Store(token, true)
+	s.sessions.Store(token, time.Now().Add(24*time.Hour))
 	return token
 }
 
@@ -105,7 +119,11 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "unauthorized", 401)
 			return
 		}
-		if _, ok := s.sessions.Load(cookie.Value); !ok {
+		expiry, ok := s.sessions.Load(cookie.Value)
+		if !ok || time.Now().After(expiry.(time.Time)) {
+			if ok {
+				s.sessions.Delete(cookie.Value)
+			}
 			http.Error(w, "unauthorized", 401)
 			return
 		}
@@ -118,7 +136,9 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 	authenticated := false
 	if hasPasscode {
 		if cookie, err := r.Cookie("commit_session"); err == nil {
-			_, authenticated = s.sessions.Load(cookie.Value)
+			if expiry, ok := s.sessions.Load(cookie.Value); ok {
+				authenticated = time.Now().Before(expiry.(time.Time))
+			}
 		}
 	} else {
 		authenticated = true
@@ -166,7 +186,7 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 	})
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -183,10 +203,24 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", 400)
 		return
 	}
+	ip := r.RemoteAddr
+	if val, ok := s.loginAttempts.Load(ip); ok {
+		t := val.(*loginThrottle)
+		if t.failures >= 5 && time.Since(t.lastFail) < time.Duration(t.failures)*10*time.Second {
+			http.Error(w, "too many attempts, try again later", 429)
+			return
+		}
+	}
+
 	if !s.db.CheckPasscode(body.Passcode) {
+		val, _ := s.loginAttempts.LoadOrStore(ip, &loginThrottle{})
+		t := val.(*loginThrottle)
+		t.failures++
+		t.lastFail = time.Now()
 		http.Error(w, "wrong passcode", 401)
 		return
 	}
+	s.loginAttempts.Delete(ip)
 
 	token := s.generateSession()
 	http.SetCookie(w, &http.Cookie{
@@ -194,7 +228,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 	})
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -222,6 +256,67 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", 400)
+		return
+	}
+	if body.APIKey == "" {
+		http.Error(w, "api_key required", 400)
+		return
+	}
+	if err := s.db.SetAPIKey(body.APIKey); err != nil {
+		http.Error(w, "failed to save key", 500)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleValidateKey(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", 400)
+		return
+	}
+	if body.APIKey == "" {
+		http.Error(w, "api_key required", 400)
+		return
+	}
+
+	req, _ := http.NewRequestWithContext(r.Context(), "POST", "https://api.anthropic.com/v1/messages",
+		bytes.NewReader([]byte(`{"model":"claude-sonnet-4-20250514","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", body.APIKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		writeJSON(w, map[string]any{"valid": false, "error": "could not reach API"})
+		return
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode == 401 {
+		writeJSON(w, map[string]any{"valid": false, "error": "invalid API key"})
+		return
+	}
+	writeJSON(w, map[string]any{"valid": true})
+}
+
+func (s *Server) handleUpdateKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "method not allowed", 405)
 		return
@@ -659,7 +754,6 @@ func (s *Server) handleDebug(w http.ResponseWriter, r *http.Request) {
 		recentList = append(recentList, map[string]any{
 			"chat_name":   m.ChatName,
 			"sender_name": m.SenderName,
-			"content":     truncate(m.Content, 80),
 			"timestamp":   m.Timestamp.Format(time.RFC3339),
 			"is_from_me":  m.IsFromMe,
 			"is_group":    m.IsGroup,
@@ -688,6 +782,22 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+func (s *Server) handleQR(w http.ResponseWriter, r *http.Request) {
+	data := r.URL.Query().Get("data")
+	if data == "" {
+		http.Error(w, "data required", 400)
+		return
+	}
+	png, err := qrcode.Encode(data, qrcode.Medium, 200)
+	if err != nil {
+		http.Error(w, "qr generation failed", 500)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(png)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

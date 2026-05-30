@@ -32,11 +32,13 @@ type Client struct {
 	dataDir   string
 	extractor Extractor
 
-	mu        sync.RWMutex
-	wa        *whatsmeow.Client
-	qrChan    chan string
-	connected bool
-	appCtx    context.Context
+	mu           sync.RWMutex
+	wa           *whatsmeow.Client
+	container    *sqlstore.Container
+	qrChan       chan string
+	connected    bool
+	appCtx       context.Context
+	loopsStarted bool
 }
 
 func New(db *store.DB, dataDir string, extractor Extractor, appCtx context.Context) *Client {
@@ -112,8 +114,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.connected = true
 	c.mu.Unlock()
 
-	go c.extractor.StartProcessingLoop(ctx)
-	go c.reminderLoop(ctx)
+	c.startLoops(ctx)
 
 	<-ctx.Done()
 	client.Disconnect()
@@ -154,8 +155,7 @@ func (c *Client) Login(ctx context.Context) (<-chan string, error) {
 				c.mu.Lock()
 				c.connected = true
 				c.mu.Unlock()
-				go c.extractor.StartProcessingLoop(c.appCtx)
-				go c.reminderLoop(c.appCtx)
+				c.startLoops(c.appCtx)
 				return
 			}
 		}
@@ -181,7 +181,39 @@ func (c *Client) handleEvent(rawEvt interface{}) {
 		log.Println("WhatsApp disconnected")
 		c.mu.Lock()
 		c.connected = false
+		client := c.wa
 		c.mu.Unlock()
+		if client != nil {
+			go c.reconnect(client)
+		}
+	}
+}
+
+func (c *Client) reconnect(client *whatsmeow.Client) {
+	backoff := 5 * time.Second
+	maxBackoff := 5 * time.Minute
+	for {
+		select {
+		case <-c.appCtx.Done():
+			return
+		case <-time.After(backoff):
+		}
+
+		c.mu.RLock()
+		current := c.wa
+		c.mu.RUnlock()
+		if current != client {
+			return
+		}
+
+		log.Printf("attempting WhatsApp reconnect...")
+		if err := client.Connect(); err != nil {
+			log.Printf("reconnect failed: %v", err)
+			backoff = min(backoff*2, maxBackoff)
+			continue
+		}
+		log.Println("WhatsApp reconnected")
+		return
 	}
 }
 
@@ -318,12 +350,30 @@ func (c *Client) GetOwnJID() types.JID {
 	return *client.Store.ID
 }
 
+func (c *Client) startLoops(ctx context.Context) {
+	c.mu.Lock()
+	if c.loopsStarted {
+		c.mu.Unlock()
+		return
+	}
+	c.loopsStarted = true
+	c.mu.Unlock()
+	go c.extractor.StartProcessingLoop(ctx)
+	go c.reminderLoop(ctx)
+}
+
 func (c *Client) getContainer() (*sqlstore.Container, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.container != nil {
+		return c.container, nil
+	}
 	dbPath := filepath.Join(c.dataDir, "whatsmeow.db")
 	container, err := sqlstore.New(context.Background(), "sqlite", fmt.Sprintf("file:%s?_pragma=foreign_keys(1)", dbPath), waLog.Noop)
 	if err != nil {
 		return nil, err
 	}
+	c.container = container
 	return container, nil
 }
 

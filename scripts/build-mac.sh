@@ -13,7 +13,7 @@
 #   --skip-notarize    Sign but skip notarization
 set -e
 
-VERSION="1.1.1"
+VERSION="1.1.2"
 APP_NAME="Commit"
 BUNDLE_ID="com.msfoundry.commit"
 DMG_NAME="Commit-${VERSION}.dmg"

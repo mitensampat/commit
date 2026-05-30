@@ -60,27 +60,34 @@ func main() {
 		go wa.Connect(ctx)
 	}
 
-	ensureHostsEntry()
+	hasHostsEntry := ensureHostsEntry()
 
-	addr := fmt.Sprintf("0.0.0.0:%d", defaultPort)
+	addr := fmt.Sprintf("127.0.0.1:%d", defaultPort)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("failed to listen on %s: %v", addr, err)
 	}
-	log.Printf("Commit running at http://commit:%d", defaultPort)
+
+	if hasHostsEntry {
+		log.Printf("Commit running at http://commit:%d", defaultPort)
+		openBrowser(fmt.Sprintf("http://commit:%d", defaultPort))
+	} else {
+		log.Printf("Commit running at http://localhost:%d", defaultPort)
+		openBrowser(fmt.Sprintf("http://localhost:%d", defaultPort))
+	}
 
 	if err := srv.Serve(ctx, ln); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }
 
-func ensureHostsEntry() {
+func ensureHostsEntry() bool {
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		return
+		return false
 	}
 	data, err := os.ReadFile("/etc/hosts")
 	if err != nil {
-		return
+		return false
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
@@ -93,7 +100,7 @@ func ensureHostsEntry() {
 		}
 		for _, f := range fields[1:] {
 			if f == "commit" {
-				return
+				return true
 			}
 		}
 	}
@@ -102,8 +109,24 @@ func ensureHostsEntry() {
 	cmd := exec.Command("osascript", "-e", script)
 	if err := cmd.Run(); err != nil {
 		log.Printf("Could not add hosts entry: %v (you can still use localhost:%d)", err, defaultPort)
-	} else {
-		log.Println("Added 'commit' to /etc/hosts — use http://commit:" + fmt.Sprint(defaultPort))
+		return false
+	}
+	log.Println("Added 'commit' to /etc/hosts — use http://commit:" + fmt.Sprint(defaultPort))
+	return true
+}
+
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	if err := cmd.Start(); err != nil {
+		log.Printf("Could not open browser: %v — open %s manually", err, url)
 	}
 }
 

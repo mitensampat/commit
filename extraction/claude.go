@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 const claudeAPIURL = "https://api.anthropic.com/v1/messages"
@@ -64,6 +66,15 @@ func callClaude(ctx context.Context, apiKey, prompt string) (string, error) {
 		return "", fmt.Errorf("read response: %w", err)
 	}
 
+	if resp.StatusCode == 429 {
+		wait := 60 * time.Second
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			if secs, err := strconv.Atoi(ra); err == nil {
+				wait = time.Duration(secs) * time.Second
+			}
+		}
+		return "", fmt.Errorf("rate limited, retry after %v", wait)
+	}
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("api error %d: %s", resp.StatusCode, string(respBody))
 	}

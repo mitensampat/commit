@@ -40,7 +40,7 @@ type CommitmentGroup struct {
 
 func GenerateCommitmentID(chatJID, title, direction string) string {
 	h := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%s", chatJID, title, direction)))
-	return fmt.Sprintf("%x", h[:8])
+	return fmt.Sprintf("%x", h[:16])
 }
 
 func (db *DB) SaveCommitment(c *Commitment) error {
@@ -325,15 +325,7 @@ func groupCommitments(commitments []*Commitment) []*CommitmentGroup {
 }
 
 func (db *DB) GetFavoritesCount() int {
-	favChats, _ := db.GetFavoritedChatJIDs()
 	var count int
-	db.conn.QueryRow(`
-		SELECT COUNT(DISTINCT chat_jid) + COUNT(DISTINCT CASE WHEN favorited = 1 AND chat_jid NOT IN (SELECT chat_jid FROM favorite_chats) THEN id END)
-		FROM commitments
-		WHERE (favorited = 1 OR chat_jid IN (SELECT chat_jid FROM favorite_chats))
-			AND status = 'open'`).Scan(&count)
-	_ = favChats
-	// Simpler: count open commitments in favorites view
 	db.conn.QueryRow(`
 		SELECT COUNT(*) FROM commitments
 		WHERE (favorited = 1 OR chat_jid IN (SELECT chat_jid FROM favorite_chats))
