@@ -227,6 +227,9 @@ func (c *Client) handleMessage(evt *events.Message) {
 	if evt.Info.Chat.Server == types.BroadcastServer {
 		return
 	}
+	if c.db.IsChatMuted(chatJID) {
+		return
+	}
 	senderJID := evt.Info.Sender.String()
 	isGroup := evt.Info.Chat.Server == types.GroupServer
 	isFromMe := evt.Info.IsFromMe
@@ -290,6 +293,17 @@ func (c *Client) SendMessage(ctx context.Context, jid types.JID, text string) er
 		Conversation: &text,
 	})
 	return err
+}
+
+func (c *Client) Notify(text string) {
+	ownJID := c.GetOwnJID()
+	if ownJID.IsEmpty() {
+		return
+	}
+	selfJID := types.NewJID(ownJID.User, types.DefaultUserServer)
+	if err := c.SendMessage(c.appCtx, selfJID, text); err != nil {
+		log.Printf("notify error: %v", err)
+	}
 }
 
 func (c *Client) SendWelcomeMessages(ctx context.Context, onStage func(stage string)) {
@@ -456,6 +470,9 @@ func (c *Client) handleHistorySync(evt *events.HistorySync) {
 	for _, conv := range conversations {
 		chatJID := conv.GetID()
 		if chatJID == "" || chatJID == "status@broadcast" {
+			continue
+		}
+		if c.db.IsChatMuted(chatJID) {
 			continue
 		}
 		isGroup := strings.HasSuffix(chatJID, "@g.us")

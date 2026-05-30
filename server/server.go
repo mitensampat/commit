@@ -128,6 +128,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/followups", s.requireAuth(s.handleFollowUps))
 	s.mux.HandleFunc("/api/followups/nudge", s.requireAuth(s.handleNudge))
 	s.mux.HandleFunc("/api/commitments/auto-resolved", s.requireAuth(s.handleAutoResolved))
+	s.mux.HandleFunc("/api/chats/mute", s.requireAuth(s.handleToggleChatMute))
+	s.mux.HandleFunc("/api/chats/muted", s.requireAuth(s.handleMutedChats))
 	s.mux.HandleFunc("/api/commitments/remind", s.requireAuth(s.handleSetReminder))
 	s.mux.HandleFunc("/api/local-ip", s.requireAuth(s.handleLocalIP))
 	s.mux.HandleFunc("/api/user-name", s.requireAuth(s.handleUserName))
@@ -542,6 +544,36 @@ func (s *Server) handleAutoResolved(w http.ResponseWriter, r *http.Request) {
 		items = []*store.Commitment{}
 	}
 	writeJSON(w, items)
+}
+
+func (s *Server) handleToggleChatMute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		ChatJID  string `json:"chat_jid"`
+		ChatName string `json:"chat_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", 400)
+		return
+	}
+	muted, err := s.db.ToggleChatMute(body.ChatJID, body.ChatName)
+	if err != nil {
+		http.Error(w, "failed", 500)
+		return
+	}
+	writeJSON(w, map[string]any{"muted": muted})
+}
+
+func (s *Server) handleMutedChats(w http.ResponseWriter, r *http.Request) {
+	muted, err := s.db.GetMutedChatJIDs()
+	if err != nil {
+		http.Error(w, "failed", 500)
+		return
+	}
+	writeJSON(w, muted)
 }
 
 func (s *Server) handleSetReminder(w http.ResponseWriter, r *http.Request) {

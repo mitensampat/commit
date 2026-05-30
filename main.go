@@ -44,8 +44,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	extractor := extraction.New(db)
+	extractor := extraction.New(db, nil)
 	wa := whatsapp.New(db, dataDir, extractor, ctx)
+	extractor.SetNotifier(wa)
 	srv := server.New(db, wa, extractor, defaultPort)
 
 	go func() {
@@ -62,7 +63,7 @@ func main() {
 
 	hasHostsEntry := ensureHostsEntry()
 
-	addr := fmt.Sprintf("127.0.0.1:%d", defaultPort)
+	addr := fmt.Sprintf("0.0.0.0:%d", defaultPort)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("failed to listen on %s: %v", addr, err)

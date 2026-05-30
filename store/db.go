@@ -108,7 +108,15 @@ func (db *DB) migrate() error {
 		db.conn.Exec("ALTER TABLE commitments ADD COLUMN reminder_at INTEGER")
 	}
 
-	db.setSchemaVersion(1)
+	if version < 2 {
+		db.conn.Exec(`CREATE TABLE IF NOT EXISTS muted_chats (
+			chat_jid   TEXT PRIMARY KEY,
+			chat_name  TEXT NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL DEFAULT 0
+		)`)
+	}
+
+	db.setSchemaVersion(2)
 	return nil
 }
 

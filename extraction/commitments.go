@@ -12,10 +12,15 @@ import (
 	"github.com/msfoundry/commit/store"
 )
 
+type Notifier interface {
+	Notify(text string)
+}
+
 type Extractor struct {
-	db     *store.DB
-	mu     sync.Mutex
-	stopCh chan struct{}
+	db       *store.DB
+	notifier Notifier
+	mu       sync.Mutex
+	stopCh   chan struct{}
 
 	debugMu       sync.RWMutex
 	loopRunning   bool
@@ -35,8 +40,12 @@ type DebugStatus struct {
 	MsgsProcessed int    `json:"msgs_processed"`
 }
 
-func New(db *store.DB) *Extractor {
-	return &Extractor{db: db}
+func New(db *store.DB, notifier Notifier) *Extractor {
+	return &Extractor{db: db, notifier: notifier}
+}
+
+func (e *Extractor) SetNotifier(n Notifier) {
+	e.notifier = n
 }
 
 type extractedCommitment struct {
@@ -133,22 +142,36 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 	log.Printf("processing %d unprocessed messages", len(msgs))
 
 	grouped := groupMessagesByChat(msgs)
+	mutedChats, _ := e.db.GetMutedChatJIDs()
 	var extractionErr error
 
 	for chatJID, chatMsgs := range grouped {
+		if mutedChats[chatJID] {
+			ids := make([]string, len(chatMsgs))
+			for i, m := range chatMsgs {
+				ids[i] = m.ID
+			}
+			e.db.MarkMessagesProcessed(ids)
+			continue
+		}
 		openCommitments, _ := e.db.GetOpenCommitmentsForChat(chatJID)
 
 		result, err := e.extractFromChat(ctx, apiKey, chatMsgs, openCommitments)
 		if err != nil {
 			log.Printf("extraction failed for %s: %v", chatJID, err)
 			extractionErr = err
+			if e.notifier != nil && strings.Contains(err.Error(), "429") {
+				e.notifier.Notify("⚠️ Commit: API rate limit hit. Extraction paused, will retry shortly.")
+			}
 			continue
 		}
 
+		chatName := chatMsgs[0].ChatName
+		var newTitles []string
 		for _, ec := range result.Commitments {
 			c := &store.Commitment{
 				ChatJID:     chatJID,
-				ChatName:    chatMsgs[0].ChatName,
+				ChatName:    chatName,
 				PersonName:  ec.PersonName,
 				Title:       ec.Title,
 				Context:     ec.Context,
@@ -172,14 +195,40 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			}
 			if err := e.db.SaveCommitment(c); err != nil {
 				log.Printf("save commitment error: %v", err)
+			} else {
+				dir := "You owe"
+				if ec.Direction == "they_owe" {
+					dir = ec.PersonName + " owes"
+				}
+				newTitles = append(newTitles, fmt.Sprintf("• %s — %s", ec.Title, dir))
 			}
 		}
 
+		var resolvedTitles []string
 		for _, resolvedID := range result.Resolved {
 			if err := e.db.AutoResolveCommitment(resolvedID); err != nil {
 				log.Printf("auto-resolve error for %s: %v", resolvedID, err)
 			} else {
 				log.Printf("auto-resolved commitment %s", resolvedID)
+				for _, oc := range openCommitments {
+					if oc.ID == resolvedID {
+						resolvedTitles = append(resolvedTitles, "• "+oc.Title)
+						break
+					}
+				}
+			}
+		}
+
+		if e.notifier != nil {
+			var parts []string
+			if len(newTitles) > 0 {
+				parts = append(parts, fmt.Sprintf("📌 New from %s:\n%s", chatName, strings.Join(newTitles, "\n")))
+			}
+			if len(resolvedTitles) > 0 {
+				parts = append(parts, fmt.Sprintf("✅ Auto-closed from %s:\n%s", chatName, strings.Join(resolvedTitles, "\n")))
+			}
+			if len(parts) > 0 {
+				e.notifier.Notify(strings.Join(parts, "\n\n"))
 			}
 		}
 

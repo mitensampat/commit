@@ -450,6 +450,45 @@ func (db *DB) ClearReminder(id string) error {
 	return err
 }
 
+// Chat muting
+
+func (db *DB) ToggleChatMute(chatJID, chatName string) (bool, error) {
+	var exists int
+	db.conn.QueryRow("SELECT COUNT(*) FROM muted_chats WHERE chat_jid = ?", chatJID).Scan(&exists)
+	if exists > 0 {
+		_, err := db.conn.Exec("DELETE FROM muted_chats WHERE chat_jid = ?", chatJID)
+		return false, err
+	}
+	_, err := db.conn.Exec(
+		"INSERT INTO muted_chats (chat_jid, chat_name, created_at) VALUES (?, ?, ?)",
+		chatJID, chatName, time.Now().Unix(),
+	)
+	return true, err
+}
+
+func (db *DB) IsChatMuted(chatJID string) bool {
+	var count int
+	db.conn.QueryRow("SELECT COUNT(*) FROM muted_chats WHERE chat_jid = ?", chatJID).Scan(&count)
+	return count > 0
+}
+
+func (db *DB) GetMutedChatJIDs() (map[string]bool, error) {
+	rows, err := db.conn.Query("SELECT chat_jid FROM muted_chats")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]bool)
+	for rows.Next() {
+		var jid string
+		if err := rows.Scan(&jid); err != nil {
+			return nil, err
+		}
+		m[jid] = true
+	}
+	return m, rows.Err()
+}
+
 func (db *DB) GetDueReminders() ([]*Commitment, error) {
 	now := time.Now().Unix()
 	rows, err := db.conn.Query(`

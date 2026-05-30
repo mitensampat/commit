@@ -1044,6 +1044,10 @@
             opacity: 1;
         }
 
+        .mute-btn.active {
+            color: var(--danger);
+        }
+
         .resolved-section {
             margin-top: 32px;
             padding-top: 24px;
@@ -1936,6 +1940,7 @@
         let currentTab = 'all';
         let allGroups = [];
         let favChats = {};
+        let mutedChats = {};
         let isSearching = false;
 
         // ── API helpers ──
@@ -2233,12 +2238,14 @@
                     updateStats(stats);
                     renderFavoritesView(favView);
                 } else {
-                    const [groups, stats, favView] = await Promise.all([
+                    const [groups, stats, favView, muted] = await Promise.all([
                         api('/api/commitments/grouped?status=' + (currentTab === 'resolved' ? 'resolved' : 'open')),
                         api('/api/commitments/stats'),
-                        api('/api/favorites')
+                        api('/api/favorites'),
+                        api('/api/chats/muted')
                     ]);
                     favChats = favView.fav_chats || {};
+                    mutedChats = muted || {};
                     allGroups = groups;
                     updateStats(stats);
                     renderGroups(groups);
@@ -2382,6 +2389,25 @@
                 loadDashboard();
             } catch (e) {
                 console.error('chat favorite error:', e);
+            }
+        }
+
+        async function toggleChatMute(chatJID, chatName) {
+            try {
+                const res = await api('/api/chats/mute', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({chat_jid: chatJID, chat_name: chatName})
+                });
+                if (res.muted) {
+                    mutedChats[chatJID] = true;
+                } else {
+                    delete mutedChats[chatJID];
+                }
+                broadcastChange();
+                loadDashboard();
+            } catch (e) {
+                console.error('chat mute error:', e);
             }
         }
 
@@ -2602,6 +2628,8 @@
                 const chatFav = favChats[group.chat_jid] || false;
                 const chatStarFill = chatFav ? 'currentColor' : 'none';
                 const chatStarClass = chatFav ? 'active' : '';
+                const chatMuted = mutedChats[group.chat_jid] || false;
+                const muteClass = chatMuted ? 'active' : '';
 
                 let metaText = group.is_group ? 'group &middot; ' : '';
                 if (isSearching) {
@@ -2619,6 +2647,7 @@
                             <div class="group-avatar"${avatarStyle}>${getInitials(group.name)}</div>
                             <span class="group-name">${esc(group.name)}</span>
                             <button class="favorite-btn group-fav-btn ${chatStarClass}" onclick="event.stopPropagation();toggleChatFavorite('${escAttr(group.chat_jid)}','${escAttr(group.name)}',${group.is_group})"><svg viewBox="0 0 24 24" fill="${chatStarFill}" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+                            <button class="mute-btn group-fav-btn ${muteClass}" onclick="event.stopPropagation();toggleChatMute('${escAttr(group.chat_jid)}','${escAttr(group.name)}')" title="${chatMuted ? 'Unmute' : 'Mute'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">${chatMuted ? '<path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>' : '<path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>'}</svg></button>
                             <span class="group-meta">${metaText}</span>
                         </div>
                         <div class="group-header-right">
