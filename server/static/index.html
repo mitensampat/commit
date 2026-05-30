@@ -1143,6 +1143,65 @@
             border-radius: 3px;
         }
 
+        .auto-resolved-strip {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+        }
+        .auto-resolved-strip-header {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .auto-resolved-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 0;
+        }
+        .auto-resolved-item + .auto-resolved-item {
+            border-top: 1px solid var(--border-color);
+        }
+        .auto-resolved-item-content {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+        .auto-resolved-item-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .auto-resolved-item-meta {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        .auto-resolved-reopen {
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: none;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 3px 10px;
+            cursor: pointer;
+            margin-left: 12px;
+        }
+        .auto-resolved-reopen:hover {
+            color: var(--text-primary);
+            border-color: var(--text-secondary);
+        }
+
         .reply-area {
             margin-top: 10px;
             border-top: 1px solid var(--line);
@@ -1702,7 +1761,7 @@
                 <div class="setup-step-desc">
                     Protect your data with a passcode. This encrypts your API key and secures the web interface.
                 </div>
-                <input type="password" class="setup-input" id="passcode-input" placeholder="Choose a passcode (4+ characters)" />
+                <input type="password" class="setup-input" id="passcode-input" placeholder="Choose a passcode (6+ characters)" />
                 <input type="password" class="setup-input" id="passcode-confirm" placeholder="Confirm passcode" style="margin-top: 8px;" />
                 <button class="btn-primary" id="passcode-btn">
                     Set Passcode
@@ -2239,15 +2298,20 @@
                     updateStats(stats);
                     renderFavoritesView(favView);
                 } else {
-                    const [groups, stats, favView] = await Promise.all([
+                    const isOpen = currentTab === 'all' || currentTab === 'you-owe' || currentTab === 'they-owe';
+                    const fetches = [
                         api('/api/commitments/grouped?status=' + (currentTab === 'resolved' ? 'resolved' : 'open')),
                         api('/api/commitments/stats'),
                         api('/api/favorites')
-                    ]);
+                    ];
+                    if (isOpen) fetches.push(api('/api/commitments/auto-resolved'));
+                    const results = await Promise.all(fetches);
+                    const [groups, stats, favView] = results;
+                    const autoResolved = results[3] || [];
                     favChats = favView.fav_chats || {};
                     allGroups = groups;
                     updateStats(stats);
-                    renderGroups(groups);
+                    renderGroups(groups, isOpen ? autoResolved : []);
                 }
                 dashboardLoaded = true;
             } catch (e) {
@@ -2275,9 +2339,43 @@
 
         const chatSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
 
-        function renderGroups(groups) {
+        function renderAutoResolvedStrip(items) {
+            if (!items || items.length === 0) return '';
+            let html = '<div class="auto-resolved-strip"><div class="auto-resolved-strip-header">Recently closed by Commit</div>';
+            for (const c of items) {
+                const dir = c.direction === 'you_owe' ? 'You' : escAttr(c.person_name);
+                const ago = timeAgo(c.resolved_at);
+                html += `<div class="auto-resolved-item">
+                    <div class="auto-resolved-item-content">
+                        <span class="auto-resolved-item-title">${esc(c.title)}</span>
+                        <span class="auto-resolved-item-meta">${esc(dir)} · ${esc(c.chat_name)} · ${ago}</span>
+                    </div>
+                    <button class="auto-resolved-reopen" onclick="reopenCommitment('${escAttr(c.id)}')">Reopen</button>
+                </div>`;
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function timeAgo(dateStr) {
+            if (!dateStr) return '';
+            const diff = Date.now() - new Date(dateStr).getTime();
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return mins + 'm ago';
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return hrs + 'h ago';
+            return Math.floor(hrs / 24) + 'd ago';
+        }
+
+        async function reopenCommitment(id) {
+            await api('/api/commitments/update', { id, status: 'open' });
+            loadDashboard();
+        }
+
+        function renderGroups(groups, autoResolved) {
             const container = document.getElementById('commitments-container');
-            if (!groups || groups.length === 0) {
+            if ((!groups || groups.length === 0) && (!autoResolved || autoResolved.length === 0)) {
                 container.innerHTML = `<div class="empty-state">
                     <div class="empty-state-title">No commitments yet</div>
                     <div class="empty-state-desc">Commit is listening to your WhatsApp conversations. Commitments will appear here as they're detected.</div>
@@ -2285,11 +2383,12 @@
                 return;
             }
 
+            const stripHtml = renderAutoResolvedStrip(autoResolved);
             const html = renderGroupsHTML(groups);
-            container.innerHTML = html || `<div class="empty-state">
+            container.innerHTML = stripHtml + (html || `<div class="empty-state">
                 <div class="empty-state-title">Nothing here</div>
                 <div class="empty-state-desc">No commitments match this filter.</div>
-            </div>`;
+            </div>`);
         }
 
         function esc(s) {

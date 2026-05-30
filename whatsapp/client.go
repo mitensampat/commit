@@ -483,6 +483,10 @@ func (c *Client) handleHistorySync(evt *events.HistorySync) {
 			if ts == 0 {
 				continue
 			}
+			msgTime := time.Unix(int64(ts), 0)
+			if msgTime.Before(time.Now().AddDate(0, 0, -3)) {
+				continue
+			}
 
 			senderName := webMsg.GetPushName()
 			isFromMe := key.GetFromMe()
@@ -509,7 +513,7 @@ func (c *Client) handleHistorySync(evt *events.HistorySync) {
 				SenderName: senderName,
 				ChatName:   chatName,
 				Content:    text,
-				Timestamp:  time.Unix(int64(ts), 0),
+				Timestamp:  msgTime,
 				IsFromMe:   isFromMe,
 				IsGroup:    isGroup,
 			}

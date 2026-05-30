@@ -419,6 +419,22 @@ func (db *DB) CountFollowUps() (int, error) {
 	return count, err
 }
 
+func (db *DB) GetRecentlyAutoResolved() ([]*Commitment, error) {
+	oneDayAgo := time.Now().Add(-24 * time.Hour).Unix()
+	rows, err := db.conn.Query(`
+		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at
+		FROM commitments
+		WHERE status = 'resolved' AND resolved_by = 'auto' AND resolved_at > ?
+		ORDER BY resolved_at DESC
+		LIMIT 10`, oneDayAgo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanCommitments(rows)
+}
+
 func (db *DB) RecordNudge(id string) error {
 	_, err := db.conn.Exec("UPDATE commitments SET last_nudged_at = ? WHERE id = ?", time.Now().Unix(), id)
 	return err
