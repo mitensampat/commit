@@ -455,7 +455,7 @@
             padding: 20px 0 0;
             font-size: 20px;
             font-weight: 600;
-            color: var(--ink-primary);
+            color: var(--ink);
         }
 
         /* Search */
@@ -895,17 +895,17 @@
             width: 100%;
             text-align: left;
             font-size: 13px;
-            color: var(--ink-primary);
+            color: var(--ink);
             transition: background 0.1s;
         }
         .reminder-option:hover {
-            background: var(--bg-secondary);
+            background: var(--surface-sunken);
         }
         .reminder-option .ro-icon {
             width: 28px;
             height: 28px;
             border-radius: 8px;
-            background: var(--bg-secondary);
+            background: var(--surface-sunken);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -922,7 +922,7 @@
         }
         .reminder-divider {
             height: 1px;
-            background: var(--border-color);
+            background: var(--line);
             margin: 4px 10px;
         }
         .reminder-custom-row {
@@ -934,10 +934,10 @@
             flex: 1;
             font-size: 12px;
             padding: 6px 8px;
-            border: 1px solid var(--border-color);
+            border: 1px solid var(--line);
             border-radius: 8px;
-            background: var(--bg-secondary);
-            color: var(--ink-primary);
+            background: var(--surface-sunken);
+            color: var(--ink);
             font-family: inherit;
         }
         .reminder-custom-row button {
@@ -946,8 +946,8 @@
             border-radius: 8px;
             cursor: pointer;
             border: none;
-            background: var(--ink-primary);
-            color: var(--bg-primary);
+            background: var(--ink);
+            color: var(--surface);
             font-weight: 500;
             font-family: inherit;
             white-space: nowrap;
@@ -964,10 +964,10 @@
             width: 100%;
             text-align: left;
             font-size: 13px;
-            color: var(--danger, #d33);
+            color: var(--danger);
             transition: background 0.1s;
         }
-        .reminder-cancel:hover { background: var(--bg-secondary); }
+        .reminder-cancel:hover { background: var(--surface-sunken); }
 
         .reminder-tag {
             font-size: 11px;
@@ -1779,7 +1779,7 @@
                 <div class="settings-row">
                     <span class="settings-row-label">Your name</span>
                     <div style="display: flex; gap: 6px; align-items: center;">
-                        <input type="text" id="settings-name" placeholder="Enter your name" style="font-size: 13px; padding: 5px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-secondary); color: var(--ink-primary); font-family: inherit; width: 160px;" />
+                        <input type="text" id="settings-name" placeholder="Enter your name" style="font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-sunken); color: var(--ink); font-family: inherit; width: 160px;" />
                         <button class="topbar-btn" onclick="saveUserName()" style="padding: 5px 10px;">Save</button>
                     </div>
                 </div>
