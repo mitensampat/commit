@@ -43,7 +43,7 @@ func main() {
 
 	extractor := extraction.New(db)
 	wa := whatsapp.New(db, dataDir, extractor, ctx)
-	srv := server.New(db, wa, defaultPort)
+	srv := server.New(db, wa, extractor, defaultPort)
 
 	go func() {
 		sigCh := make(chan os.Signal, 1)

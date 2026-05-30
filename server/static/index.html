@@ -1764,7 +1764,7 @@
             <div class="content-inner" id="commitments-container"></div>
         </div>
 
-        <div class="footer">v1.1 by <a href="https://x.com/miten" target="_blank" style="color: inherit; text-decoration: none;">MS Foundry</a></div>
+        <div class="footer">v1.1.1 by <a href="https://x.com/miten" target="_blank" style="color: inherit; text-decoration: none;">MS Foundry</a></div>
     </div>
 
     <!-- ══════ Settings Overlay ══════ -->
@@ -1821,6 +1821,15 @@
                         </ol>
                         <div style="margin-top: 8px; color: var(--ink-faint); font-size: 11px;">Your passcode protects access. The URL is unique to your machine.</div>
                     </div>
+                </div>
+            </div>
+            <div class="settings-group">
+                <div class="settings-group-title">Diagnostics</div>
+                <div id="debug-panel" style="font-size: 12px; color: var(--ink-secondary); line-height: 1.8;">
+                    <div style="text-align: center; color: var(--ink-faint); padding: 12px;">Loading...</div>
+                </div>
+                <div style="padding: 8px 16px;">
+                    <button class="topbar-btn" onclick="loadDebugInfo()" style="font-size: 11px; padding: 4px 10px;">Refresh</button>
                 </div>
             </div>
             <div class="settings-group">
@@ -2800,8 +2809,88 @@
                     el.textContent = window.location.origin;
                 }
             }
+            loadDebugInfo();
         }
         function closeSettings() { document.getElementById('settings-overlay').classList.remove('active'); }
+
+        async function loadDebugInfo() {
+            const panel = document.getElementById('debug-panel');
+            try {
+                const d = await api('/api/debug');
+                const wa = d.whatsapp;
+                const m = d.messages;
+                const ex = d.extraction;
+                const msgs = d.recent_messages || [];
+
+                const dot = (ok) => `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ok ? 'var(--growth)' : 'var(--danger)'};margin-right:6px;vertical-align:middle;"></span>`;
+
+                let timeAgo = '';
+                if (ex.last_run_at) {
+                    const secs = Math.floor((Date.now() - new Date(ex.last_run_at).getTime()) / 1000);
+                    timeAgo = secs < 60 ? secs + 's ago' : Math.floor(secs/60) + 'm ago';
+                }
+
+                let html = `
+                    <div class="settings-row">
+                        <span class="settings-row-label">${dot(wa.connected)}WhatsApp</span>
+                        <span class="settings-row-value">${wa.connected ? 'Connected' : wa.has_session ? 'Disconnected' : 'No session'}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">${dot(ex.loop_running)}Extraction loop</span>
+                        <span class="settings-row-value">${ex.loop_running ? 'Running' : 'Stopped'}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Messages</span>
+                        <span class="settings-row-value">${m.total} total, ${m.processed} processed, ${m.unprocessed} queued</span>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Extraction batches</span>
+                        <span class="settings-row-value">${ex.batches_run} run${timeAgo ? ', last ' + timeAgo : ''}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Uptime</span>
+                        <span class="settings-row-value">${d.uptime}</span>
+                    </div>`;
+
+                if (ex.last_error) {
+                    let errAgo = '';
+                    if (ex.last_error_at) {
+                        const secs = Math.floor((Date.now() - new Date(ex.last_error_at).getTime()) / 1000);
+                        errAgo = secs < 60 ? secs + 's ago' : Math.floor(secs/60) + 'm ago';
+                    }
+                    html += `<div class="settings-row" style="color: var(--danger);">
+                        <span class="settings-row-label">Last error</span>
+                        <span class="settings-row-value" style="font-size:11px;">${errAgo ? errAgo + ' — ' : ''}${escapeHtml(ex.last_error)}</span>
+                    </div>`;
+                }
+
+                if (msgs.length > 0) {
+                    html += `<div style="padding: 12px 16px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-tertiary);">Recent messages</div>`;
+                    for (const msg of msgs) {
+                        const t = new Date(msg.timestamp);
+                        const time = t.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                        const who = msg.is_from_me ? 'You' : (msg.sender_name || 'Unknown');
+                        html += `<div style="padding: 4px 16px; font-size: 11px; color: var(--ink-tertiary); border-bottom: 1px solid var(--line); line-height: 1.5;">
+                            <span style="color: var(--ink-secondary); font-weight: 500;">${escapeHtml(who)}</span>
+                            <span style="color: var(--ink-faint); margin: 0 4px;">in</span>
+                            <span style="color: var(--ink-secondary);">${escapeHtml(msg.chat_name || 'DM')}</span>
+                            <span style="float:right; color: var(--ink-faint);">${time}</span>
+                            <div style="margin-top: 2px; color: var(--ink-tertiary);">${escapeHtml(msg.content)}</div>
+                        </div>`;
+                    }
+                }
+
+                panel.innerHTML = html;
+            } catch (e) {
+                panel.innerHTML = '<div style="padding: 12px 16px; color: var(--danger);">Failed to load: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
 
         async function logout() {
             if (!confirm('Disconnect WhatsApp?')) return;

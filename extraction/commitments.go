@@ -16,6 +16,23 @@ type Extractor struct {
 	db     *store.DB
 	mu     sync.Mutex
 	stopCh chan struct{}
+
+	debugMu       sync.RWMutex
+	loopRunning   bool
+	lastRunAt     time.Time
+	lastError     string
+	lastErrorAt   time.Time
+	batchesRun    int
+	msgsProcessed int
+}
+
+type DebugStatus struct {
+	LoopRunning   bool   `json:"loop_running"`
+	LastRunAt     string `json:"last_run_at"`
+	LastError     string `json:"last_error"`
+	LastErrorAt   string `json:"last_error_at"`
+	BatchesRun    int    `json:"batches_run"`
+	MsgsProcessed int    `json:"msgs_processed"`
 }
 
 func New(db *store.DB) *Extractor {
@@ -41,8 +58,36 @@ const (
 	maxInterval  = 5 * time.Minute
 )
 
+func (e *Extractor) GetDebugStatus() DebugStatus {
+	e.debugMu.RLock()
+	defer e.debugMu.RUnlock()
+	s := DebugStatus{
+		LoopRunning:   e.loopRunning,
+		BatchesRun:    e.batchesRun,
+		MsgsProcessed: e.msgsProcessed,
+	}
+	if !e.lastRunAt.IsZero() {
+		s.LastRunAt = e.lastRunAt.Format(time.RFC3339)
+	}
+	s.LastError = e.lastError
+	if !e.lastErrorAt.IsZero() {
+		s.LastErrorAt = e.lastErrorAt.Format(time.RFC3339)
+	}
+	return s
+}
+
 func (e *Extractor) StartProcessingLoop(ctx context.Context) {
 	log.Println("extraction loop started")
+	e.debugMu.Lock()
+	e.loopRunning = true
+	e.debugMu.Unlock()
+
+	defer func() {
+		e.debugMu.Lock()
+		e.loopRunning = false
+		e.debugMu.Unlock()
+	}()
+
 	interval := baseInterval
 	for {
 		select {
@@ -54,6 +99,10 @@ func (e *Extractor) StartProcessingLoop(ctx context.Context) {
 		err := e.ProcessBatch(ctx)
 		if err != nil {
 			log.Printf("extraction error: %v", err)
+			e.debugMu.Lock()
+			e.lastError = err.Error()
+			e.lastErrorAt = time.Now()
+			e.debugMu.Unlock()
 			interval = min(interval*2, maxInterval)
 		} else {
 			interval = baseInterval
@@ -75,6 +124,10 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 		return fmt.Errorf("get unprocessed: %w", err)
 	}
 	if len(msgs) == 0 {
+		e.debugMu.Lock()
+		e.lastRunAt = time.Now()
+		e.batchesRun++
+		e.debugMu.Unlock()
 		return nil
 	}
 	log.Printf("processing %d unprocessed messages", len(msgs))
@@ -138,6 +191,12 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			log.Printf("mark processed error: %v", err)
 		}
 	}
+
+	e.debugMu.Lock()
+	e.lastRunAt = time.Now()
+	e.batchesRun++
+	e.msgsProcessed += len(msgs)
+	e.debugMu.Unlock()
 
 	return extractionErr
 }

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/msfoundry/commit/extraction"
 	"github.com/msfoundry/commit/store"
 	"github.com/msfoundry/commit/whatsapp"
 
@@ -24,15 +25,17 @@ import (
 var staticFS embed.FS
 
 type Server struct {
-	db       *store.DB
-	wa       *whatsapp.Client
-	port     int
-	mux      *http.ServeMux
-	sessions sync.Map // token -> bool
+	db        *store.DB
+	wa        *whatsapp.Client
+	extractor *extraction.Extractor
+	port      int
+	mux       *http.ServeMux
+	sessions  sync.Map // token -> bool
+	startedAt time.Time
 }
 
-func New(db *store.DB, wa *whatsapp.Client, port int) *Server {
-	s := &Server{db: db, wa: wa, port: port}
+func New(db *store.DB, wa *whatsapp.Client, ext *extraction.Extractor, port int) *Server {
+	s := &Server{db: db, wa: wa, extractor: ext, port: port, startedAt: time.Now()}
 	s.mux = http.NewServeMux()
 	s.registerRoutes()
 	return s
@@ -79,6 +82,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/commitments/remind", s.requireAuth(s.handleSetReminder))
 	s.mux.HandleFunc("/api/local-ip", s.requireAuth(s.handleLocalIP))
 	s.mux.HandleFunc("/api/user-name", s.requireAuth(s.handleUserName))
+	s.mux.HandleFunc("/api/debug", s.requireAuth(s.handleDebug))
 	s.mux.HandleFunc("/api/logout", s.requireAuth(s.handleLogout))
 }
 
@@ -634,6 +638,47 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleDebug(w http.ResponseWriter, r *http.Request) {
+	totalMsgs, processedMsgs, _ := s.db.GetMessageStats()
+	extractionStatus := s.extractor.GetDebugStatus()
+
+	recentMsgs, _ := s.db.GetRecentMessages(10)
+	var recentList []map[string]any
+	for _, m := range recentMsgs {
+		recentList = append(recentList, map[string]any{
+			"chat_name":   m.ChatName,
+			"sender_name": m.SenderName,
+			"content":     truncate(m.Content, 80),
+			"timestamp":   m.Timestamp.Format(time.RFC3339),
+			"is_from_me":  m.IsFromMe,
+			"is_group":    m.IsGroup,
+		})
+	}
+
+	writeJSON(w, map[string]any{
+		"uptime":     time.Since(s.startedAt).String(),
+		"started_at": s.startedAt.Format(time.RFC3339),
+		"whatsapp": map[string]any{
+			"connected":   s.wa.IsConnected(),
+			"has_session": s.wa.HasSession(),
+		},
+		"messages": map[string]any{
+			"total":       totalMsgs,
+			"processed":   processedMsgs,
+			"unprocessed": totalMsgs - processedMsgs,
+		},
+		"extraction":      extractionStatus,
+		"recent_messages": recentList,
+	})
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

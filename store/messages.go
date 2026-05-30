@@ -82,6 +82,32 @@ func (db *DB) GetMessageStats() (total int, processed int, err error) {
 	return
 }
 
+func (db *DB) GetRecentMessages(limit int) ([]*Message, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, chat_jid, sender_jid, sender_name, chat_name, content, timestamp, is_from_me, is_group
+		FROM messages ORDER BY timestamp DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var msgs []*Message
+	for rows.Next() {
+		m := &Message{}
+		var ts int64
+		var fromMe, group int
+		if err := rows.Scan(&m.ID, &m.ChatJID, &m.SenderJID, &m.SenderName, &m.ChatName,
+			&m.Content, &ts, &fromMe, &group); err != nil {
+			return nil, err
+		}
+		m.Timestamp = time.Unix(ts, 0)
+		m.IsFromMe = fromMe == 1
+		m.IsGroup = group == 1
+		msgs = append(msgs, m)
+	}
+	return msgs, nil
+}
+
 func (db *DB) GetChatDisplayName(chatJID string) string {
 	var name string
 	db.conn.QueryRow(
