@@ -1,16 +1,14 @@
 # Commit
 
-A WhatsApp commitment tracker that reads your conversations, extracts promises and obligations, and tracks them to completion.
+Commit enhances your WhatsApp usage by finding commitments automatically — things you said you'd do, and things others said they'd do. It auto detects when things are done.
 
-Commit connects to WhatsApp via the multi-device API, uses Claude to understand your conversations, and builds a live dashboard of who owes what to whom.
+When something goes quiet, it surfaces it for follow-up.
 
 ## How it works
 
-1. **Link WhatsApp** — scan a QR code to connect your account
-2. **AI extracts commitments** — Claude reads new messages and identifies promises, deadlines, and obligations
-3. **Auto-resolves** — when a commitment is fulfilled in conversation, Commit marks it done
+You scan a QR code to link your WhatsApp account, same as WhatsApp Web. Commit runs on your machine. Every 10 seconds it reads new messages, sends them to the Claude API for analysis, and logs any commitments it finds.
 
-Everything runs locally on your machine. Messages are decrypted on-device and stored in a local database. Message content is sent to the Claude API for commitment analysis — nothing is stored on a remote server by Commit.
+The dashboard shows everything grouped by person: what you owe, what they owe, how long it's been. You can reply, set reminders, mark things done, or dismiss them.
 
 ## Features
 
@@ -128,7 +126,6 @@ NOTARY_PROFILE="commit-notary" \
 ## Third-party services
 
 - **Claude API** (Anthropic) — commitment extraction from message content
-- **Formspree** — landing page waitlist form submission (landing page only, not the app)
 
 ## License
 

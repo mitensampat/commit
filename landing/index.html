@@ -897,65 +897,14 @@
     <div class="wrap access-wrap">
       <h2>commit is opening up <em>slowly.</em></h2>
       <p>
-        onboarding users one by one. drop your email. we'll be in touch.
+        onboarding users one by one.
       </p>
 
       <div class="form-card">
-        <!-- Step 1: email -->
-        <form class="form-step active" id="step-email" novalidate>
-          <div class="email-row">
-            <input type="email" name="email" id="email" placeholder="you@company.com" required autocomplete="email" />
-            <button type="submit" class="btn-primary">request access →</button>
-          </div>
-          <p class="form-note">no newsletter. one email, then your install link.</p>
-        </form>
-
-        <!-- Step 2: chip profile -->
-        <form class="form-step" id="step-profile" novalidate>
-          <p class="profile-intro">
-            you're on the list. three quick taps to help us prioritize. all optional.
-          </p>
-
-          <div class="chip-group">
-            <div class="chip-label">what messaging apps do you use most?</div>
-            <div class="chips" data-field="platform">
-              <button type="button" class="chip">WhatsApp</button>
-              <button type="button" class="chip">iMessage</button>
-              <button type="button" class="chip">Telegram</button>
-              <button type="button" class="chip">all of them</button>
-            </div>
-          </div>
-
-          <div class="chip-group">
-            <div class="chip-label">what drops most often?</div>
-            <div class="chips" data-field="problem">
-              <button type="button" class="chip">things I said I'd do</button>
-              <button type="button" class="chip">things others owe me</button>
-              <button type="button" class="chip">both equally</button>
-            </div>
-          </div>
-
-          <div class="chip-group">
-            <div class="chip-label">how soon?</div>
-            <div class="chips" data-field="timing">
-              <button type="button" class="chip">today</button>
-              <button type="button" class="chip">this week</button>
-              <button type="button" class="chip">just curious</button>
-            </div>
-          </div>
-
-          <div class="chip-actions">
-            <button type="submit" class="btn-primary">send</button>
-            <button type="button" class="link-skip" id="skip-profile">skip</button>
-          </div>
-          <p class="form-error" id="form-error" role="alert" aria-live="polite"></p>
-        </form>
-
-        <!-- Step 3: done -->
-        <div class="form-done" id="step-done">
-          <div class="check">&#10003;</div>
-          <h3>you're in.</h3>
-          <p>watch your inbox. we'll send your install link shortly.</p>
+        <button class="btn-primary" id="request-access-btn" onclick="document.getElementById('request-access-btn').style.display='none';document.getElementById('access-reveal').style.display='block';" style="padding: 12px 28px; font-size: 15px;">request access →</button>
+        <div id="access-reveal" style="display: none;">
+          <p style="font-size: 17px; font-weight: 500; color: var(--ink); margin-bottom: 12px;"><a href="mailto:coach.alfred.ai@gmail.com?subject=Commit%20app" style="color: var(--ink); text-decoration: underline;">coach.alfred.ai@gmail.com</a></p>
+          <p style="font-size: 14px; color: var(--ink-2); line-height: 1.6;">send me an email with subject line "Commit app" and describe what you intend to use this for. I will send you the installable in around 24 hours.</p>
         </div>
       </div>
     </div>
@@ -1207,92 +1156,6 @@
     }, 3400);
   })();
 
-  // Form progressive reveal
-  const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mjglvnja';
-
-  const stepEmail = document.getElementById('step-email');
-  const stepProfile = document.getElementById('step-profile');
-  const stepDone = document.getElementById('step-done');
-  const skipBtn = document.getElementById('skip-profile');
-  const errEl = document.getElementById('form-error');
-
-  let prospectEmail = '';
-
-  function show(el) {
-    [stepEmail, stepProfile, stepDone].forEach(s => s.classList.remove('active'));
-    el.classList.add('active');
-  }
-
-  function setError(msg) {
-    if (!errEl) return;
-    errEl.textContent = msg || '';
-    errEl.style.display = msg ? 'block' : 'none';
-  }
-
-  stepEmail.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const email = document.getElementById('email').value.trim();
-    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
-      document.getElementById('email').focus();
-      return;
-    }
-    prospectEmail = email;
-    show(stepProfile);
-  });
-
-  document.querySelectorAll('.chips').forEach(group => {
-    group.addEventListener('click', (e) => {
-      const chip = e.target.closest('.chip');
-      if (!chip) return;
-      group.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
-      chip.classList.add('selected');
-    });
-  });
-
-  async function submitProspect(includeProfile) {
-    setError('');
-    const submitBtn = stepProfile.querySelector('button[type=submit]');
-    const originalText = submitBtn.textContent;
-    submitBtn.disabled = true;
-    if (skipBtn) skipBtn.disabled = true;
-    submitBtn.textContent = 'sending…';
-
-    const payload = {
-      email: prospectEmail,
-      platform: '',
-      problem: '',
-      timing: '',
-      _subject: `commit access request — ${prospectEmail}`,
-    };
-    if (includeProfile) {
-      document.querySelectorAll('.chips').forEach(g => {
-        const selected = g.querySelector('.chip.selected');
-        payload[g.dataset.field] = selected ? selected.textContent.trim() : '';
-      });
-    }
-
-    try {
-      const res = await fetch(FORMSPREE_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      show(stepDone);
-    } catch (err) {
-      submitBtn.disabled = false;
-      if (skipBtn) skipBtn.disabled = false;
-      submitBtn.textContent = originalText;
-      setError("couldn’t send. please try again.");
-    }
-  }
-
-  stepProfile.addEventListener('submit', (e) => {
-    e.preventDefault();
-    submitProspect(true);
-  });
-
-  skipBtn.addEventListener('click', () => submitProspect(false));
 </script>
 <noscript><p style="text-align:center;padding:40px;font-family:Georgia,serif;color:#aaa;">This page requires JavaScript to display properly.</p></noscript>
 </body>

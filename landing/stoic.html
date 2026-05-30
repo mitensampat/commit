@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Commit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  body {
+    font-family: "Newsreader", "Times New Roman", Georgia, serif;
+    max-width: 520px;
+    margin: 60px auto;
+    padding: 0 20px;
+    color: #1a2744;
+    line-height: 1.7;
+    font-size: 16px;
+    background: #fff;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 0 24px;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .header-left svg {
+    width: 20px;
+    height: 20px;
+  }
+  .header-left .version {
+    font-weight: 400;
+    font-size: 14px;
+    color: #8090a8;
+  }
+  .clock {
+    font-size: 14px;
+    color: #8090a8;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 24px;
+  }
+  p { margin: 0 0 16px; }
+  a { color: #1a2744; }
+  b { font-weight: 600; }
+  .quiet { color: #8090a8; font-size: 14px; }
+  .quiet a { color: #8090a8; }
+  .section { margin: 36px 0; }
+  .email { font-weight: 600; }
+  hr { border: none; border-top: 1px solid #d0d8e0; margin: 36px 0; }
+  ol { padding-left: 20px; margin: 0 0 16px; }
+  li { margin-bottom: 4px; }
+  .reveal { display: none; margin-top: 12px; }
+  .link { cursor: pointer; text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C12.4 5.5 14 8 16.5 10C19 11.5 22 11.8 22 12C22 12.2 19 12.5 16.5 14C14 16 12.4 18.5 12 22C11.6 18.5 10 16 7.5 14C5 12.5 2 12.2 2 12C2 11.8 5 11.5 7.5 10C10 8 11.6 5.5 12 2Z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+    Commit <span class="version">v1.1.2</span>
+  </div>
+  <div class="clock" id="clock"></div>
+</div>
+
+<p>Commit enhances your WhatsApp usage by finding commitments automatically &mdash; things you said you'd do, and things others said they'd do. it auto detects when things are done.</p>
+
+<p>when something goes quiet, it surfaces it for follow-up.</p>
+
+<div class="section">
+<p><b>how it works</b></p>
+<p>you scan a QR code to link your WhatsApp account, same as WhatsApp Web. Commit runs on your machine. every 10 seconds it reads new messages, sends them to the Claude API for analysis, and logs any commitments it finds.</p>
+<p>the dashboard shows everything grouped by person: what you owe, what they owe, how long it's been. you can reply, set reminders, mark things done, or dismiss them.</p>
+</div>
+
+<div class="section">
+<p><b>a note on privacy</b></p>
+<p>messages are decrypted on your machine and stored in a local SQLite database. nothing is uploaded to a server by Commit.</p>
+<p>message content is sent to the Claude API for commitment extraction. <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#data-retention-and-privacy">Anthropic does not train on API inputs.</a></p>
+</div>
+
+<div class="section">
+<p><b>features</b></p>
+<ol>
+<li>auto-extraction and auto-resolution of commitments</li>
+<li>follow-up nudges for things that have gone quiet</li>
+<li>reminders via WhatsApp message to yourself</li>
+<li>reply to any chat from the dashboard</li>
+<li>WhatsApp bot commands (message yourself: "commitments", "owe @name", "done &lt;text&gt;")</li>
+<li>favorites, search, dark mode, mobile web</li>
+<li>passcode protection, AES-GCM encrypted API key</li>
+</ol>
+</div>
+
+<div class="section">
+<p><b>requirements</b></p>
+<p>macOS 12+ or Windows 10+. a WhatsApp account. a <a href="https://console.anthropic.com/">Claude API key</a>.</p>
+</div>
+
+<hr>
+
+<p id="access-prompt">Commit is ready for you. <span class="link" onclick="document.getElementById('access-prompt').style.display='none';document.getElementById('access').style.display='block';">request access</span></p>
+
+<div id="access" class="reveal">
+<p>email <span class="email">coach.alfred.ai@gmail.com</span> with subject line "Commit app" and describe what you intend to use this for. I'll send you the installable in around 24 hours.</p>
+</div>
+
+<p class="quiet" style="margin-top: 36px;">by <a href="https://x.com/miten">MS Foundry</a> &middot; updated 30 May 2025</p>
+
+<script>
+function updateClock() {
+  var d = new Date();
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var day = d.getDate();
+  var month = months[d.getMonth()];
+  var hours = String(d.getHours()).padStart(2, '0');
+  var mins = String(d.getMinutes()).padStart(2, '0');
+  document.getElementById('clock').textContent = day + ' ' + month + ' ' + hours + ':' + mins;
+}
+updateClock();
+setInterval(updateClock, 60000);
+</script>
+</body>
+</html>
