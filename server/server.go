@@ -289,10 +289,19 @@ func (s *Server) handleLoginQR(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				if s.wa.IsConnected() {
 					fmt.Fprintf(w, "data: {\"connected\": true}\n\n")
+					flusher.Flush()
+
+					s.wa.SendWelcomeMessages(ctx, func(stage string) {
+						fmt.Fprintf(w, "data: {\"stage\": \"%s\"}\n\n", stage)
+						flusher.Flush()
+					})
+
+					fmt.Fprintf(w, "data: {\"done\": true}\n\n")
+					flusher.Flush()
 				} else {
 					fmt.Fprintf(w, "data: {\"error\": \"QR expired\"}\n\n")
+					flusher.Flush()
 				}
-				flusher.Flush()
 				return
 			}
 			fmt.Fprintf(w, "data: {\"qr\": \"%s\"}\n\n", qr)

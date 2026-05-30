@@ -260,6 +260,35 @@ func (c *Client) SendMessage(ctx context.Context, jid types.JID, text string) er
 	return err
 }
 
+func (c *Client) SendWelcomeMessages(ctx context.Context, onStage func(stage string)) {
+	ownJID := c.GetOwnJID()
+	if ownJID.IsEmpty() {
+		log.Println("welcome: can't get own JID")
+		return
+	}
+
+	stages := []struct {
+		key  string
+		text string
+	}{
+		{"connected", "✅ Connected to Commit"},
+		{"scanning", "🔍 Now scanning your recent message history..."},
+		{"ready", "🚀 Ready to go! Your commitments will appear on the dashboard."},
+	}
+
+	for i, s := range stages {
+		if err := c.SendMessage(ctx, ownJID, s.text); err != nil {
+			log.Printf("welcome message %q: %v", s.key, err)
+		}
+		if onStage != nil {
+			onStage(s.key)
+		}
+		if i < len(stages)-1 {
+			time.Sleep(2 * time.Second)
+		}
+	}
+}
+
 func (c *Client) isSelfChat(evt *events.Message) bool {
 	chat := evt.Info.Chat
 	sender := evt.Info.Sender

@@ -815,8 +815,28 @@
           <p>things they owe you with no reply. commit surfaces them, drafts a polite nudge, and lets you send it in one tap.</p>
         </div>
         <div class="feature">
+          <h3>reminders.</h3>
+          <p>set a reminder on any commitment. when it's due, commit sends you a WhatsApp message so it surfaces right in your chat list.</p>
+        </div>
+        <div class="feature">
+          <h3>favorites.</h3>
+          <p>star important chats or commitments. they get their own tab so you can always find what matters fast.</p>
+        </div>
+        <div class="feature">
+          <h3>reply from dashboard.</h3>
+          <p>respond to any conversation directly from commit. no need to switch back to WhatsApp to follow up.</p>
+        </div>
+        <div class="feature">
           <h3>bot commands.</h3>
           <p>message yourself on WhatsApp to check commitments. "commit @Alex" shows what's open. "commitments" lists everything.</p>
+        </div>
+        <div class="feature">
+          <h3>works on mobile.</h3>
+          <p>the dashboard is fully responsive. open it in your phone's browser at the same local address — same experience, smaller screen.</p>
+        </div>
+        <div class="feature">
+          <h3>dark and light theme.</h3>
+          <p>toggle from the toolbar. your preference is remembered across sessions.</p>
         </div>
       </div>
     </div>
@@ -858,11 +878,11 @@
         </div>
         <div class="privacy-col">
           <div class="privacy-label">leaves your machine</div>
-          <p>only the small context needed for extraction — sent to Claude (by Anthropic) for commitment analysis, then forgotten. <strong>no chat logs. no training. no human review.</strong></p>
+          <p>message content is sent to the Claude API for commitment analysis. <strong>Anthropic does not train on API inputs</strong> — their <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#data-retention-and-privacy" target="_blank" style="color: var(--ink); text-decoration: underline;">data retention policy</a> governs what happens on their side. no human review.</p>
         </div>
       </div>
 
-      <p class="privacy-footnote">disconnect WhatsApp in settings. delete the app, and every trace goes with it.</p>
+      <p class="privacy-footnote">to fully remove: unlink the device from WhatsApp, delete the app, and delete ~/.commit/ from your home folder.</p>
     </div>
   </section>
 

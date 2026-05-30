@@ -17,12 +17,15 @@ import (
 	"github.com/msfoundry/commit/server"
 	"github.com/msfoundry/commit/store"
 	"github.com/msfoundry/commit/whatsapp"
+
+	waStore "go.mau.fi/whatsmeow/store"
 )
 
 const defaultPort = 9384
 
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	waStore.SetOSInfo("Commit", [3]uint32{1, 1, 1})
 
 	dataDir, err := dataDirectory()
 	if err != nil {

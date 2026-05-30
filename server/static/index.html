@@ -355,6 +355,60 @@
             line-height: 1.5;
         }
 
+        .connecting-stages {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-top: 32px;
+            text-align: left;
+        }
+
+        .connecting-stage {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--ink-tertiary);
+            transition: color 0.3s;
+        }
+
+        .connecting-stage.active {
+            color: var(--ink);
+        }
+
+        .connecting-stage.done {
+            color: var(--ink-secondary);
+        }
+
+        .stage-icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .stage-spinner {
+            width: 20px;
+            height: 20px;
+            margin: 0;
+            display: none;
+        }
+
+        .stage-check {
+            width: 20px;
+            height: 20px;
+            display: none;
+            color: var(--growth);
+        }
+
+        .connecting-stage.active .stage-spinner {
+            display: block;
+        }
+
+        .connecting-stage.done .stage-check {
+            display: block;
+        }
+
         /* ══════════════════════════════════════
            SCREEN 4: Main Dashboard
            ══════════════════════════════════════ */
@@ -1601,7 +1655,7 @@
                     </div>
                     <div class="onboarding-title">Your data stays yours</div>
                     <div class="onboarding-desc">
-                        Commit runs entirely on your machine. Messages are decrypted locally. Only small snippets are sent to Claude for analysis — then forgotten. No cloud storage. No training. No human review.
+                        Commit runs entirely on your machine. Messages are decrypted locally and stored in a local database. Message content is sent to the Claude API for commitment analysis — Anthropic does not train on API inputs. No cloud storage. No telemetry.
                     </div>
                 </div>
 
@@ -1644,6 +1698,7 @@
             <div class="setup-logo"><svg class="logo-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2C12.4 5.5 14 8 16.5 10C19 11.5 22 11.8 22 12C22 12.2 19 12.5 16.5 14C14 16 12.4 18.5 12 22C11.6 18.5 10 16 7.5 14C5 12.5 2 12.2 2 12C2 11.8 5 11.5 7.5 10C10 8 11.6 5.5 12 2Z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>Commit</div>
             <div class="setup-tagline">Stay on top of things.</div>
             <div class="setup-card">
+                <div class="setup-step-label">Step 1 of 3</div>
                 <div class="setup-step-title">Set a Passcode</div>
                 <div class="setup-step-desc">
                     Protect your data with a passcode. This encrypts your API key and secures the web interface.
@@ -1668,7 +1723,7 @@
             <div class="setup-logo"><svg class="logo-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2C12.4 5.5 14 8 16.5 10C19 11.5 22 11.8 22 12C22 12.2 19 12.5 16.5 14C14 16 12.4 18.5 12 22C11.6 18.5 10 16 7.5 14C5 12.5 2 12.2 2 12C2 11.8 5 11.5 7.5 10C10 8 11.6 5.5 12 2Z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>Commit</div>
             <div class="setup-tagline">Stay on top of things.</div>
             <div class="setup-card">
-                <div class="setup-step-label">Step 1 of 2</div>
+                <div class="setup-step-label">Step 2 of 3</div>
                 <div class="setup-step-title">Claude API Key</div>
                 <div class="setup-step-desc">
                     Commit uses Claude to understand your conversations and extract commitments. Your key stays local — nothing leaves your machine except API calls.
@@ -1691,7 +1746,7 @@
             <div class="setup-logo"><svg class="logo-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2C12.4 5.5 14 8 16.5 10C19 11.5 22 11.8 22 12C22 12.2 19 12.5 16.5 14C14 16 12.4 18.5 12 22C11.6 18.5 10 16 7.5 14C5 12.5 2 12.2 2 12C2 11.8 5 11.5 7.5 10C10 8 11.6 5.5 12 2Z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>Commit</div>
             <div class="setup-tagline">Stay on top of things.</div>
             <div class="qr-card">
-                <div class="qr-step-label">Step 2 of 2</div>
+                <div class="qr-step-label">Step 3 of 3</div>
                 <div class="qr-title">Connect WhatsApp</div>
                 <div class="qr-desc">Scan this code with your phone to link Commit to your WhatsApp account.</div>
                 <div class="qr-box" id="qr-display">
@@ -1712,9 +1767,30 @@
     <div class="screen connecting-screen" id="screen-connecting">
         <div class="connecting-container">
             <div class="setup-logo" style="margin-bottom: 32px;"><svg class="logo-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2C12.4 5.5 14 8 16.5 10C19 11.5 22 11.8 22 12C22 12.2 19 12.5 16.5 14C14 16 12.4 18.5 12 22C11.6 18.5 10 16 7.5 14C5 12.5 2 12.2 2 12C2 11.8 5 11.5 7.5 10C10 8 11.6 5.5 12 2Z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>Commit</div>
-            <div class="connecting-spinner"></div>
-            <div class="connecting-title">Connecting to WhatsApp</div>
-            <div class="connecting-desc">Syncing your conversations and starting to listen for commitments. This usually takes a few seconds.</div>
+            <div class="connecting-title" id="connecting-title">Setting up...</div>
+            <div class="connecting-stages">
+                <div class="connecting-stage" id="stage-connected">
+                    <div class="stage-icon">
+                        <div class="connecting-spinner stage-spinner"></div>
+                        <svg class="stage-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+                    </div>
+                    <span>Connected to WhatsApp</span>
+                </div>
+                <div class="connecting-stage" id="stage-scanning">
+                    <div class="stage-icon">
+                        <div class="connecting-spinner stage-spinner"></div>
+                        <svg class="stage-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+                    </div>
+                    <span>Scanning recent message history</span>
+                </div>
+                <div class="connecting-stage" id="stage-ready">
+                    <div class="stage-icon">
+                        <div class="connecting-spinner stage-spinner"></div>
+                        <svg class="stage-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+                    </div>
+                    <span>Ready to go</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1893,13 +1969,15 @@
                 showSlide(onboardingSlide + 1);
             } else {
                 localStorage.setItem('commit_onboarded', '1');
-                goToScreen('screen-setup');
+                goToScreen('screen-set-passcode');
+                document.getElementById('passcode-input').focus();
             }
         });
 
         document.getElementById('onboarding-skip').addEventListener('click', () => {
             localStorage.setItem('commit_onboarded', '1');
-            goToScreen('screen-setup');
+            goToScreen('screen-set-passcode');
+            document.getElementById('passcode-input').focus();
         });
 
         // ── Init: check auth then status ──
@@ -1916,7 +1994,8 @@
                 if (!localStorage.getItem('commit_onboarded')) {
                     goToScreen('screen-onboarding');
                 } else {
-                    goToScreen('screen-setup');
+                    goToScreen('screen-set-passcode');
+                    document.getElementById('passcode-input').focus();
                 }
             }
         }
@@ -1966,8 +2045,8 @@
         document.getElementById('passcode-confirm').addEventListener('keydown', e => { if (e.key === 'Enter') submitSetPasscode(); });
         document.getElementById('skip-passcode').addEventListener('click', async (e) => {
             e.preventDefault();
-            goToScreen('screen-qr');
-            startQRLogin();
+            goToScreen('screen-setup');
+            document.getElementById('api-key-input').focus();
         });
 
         async function submitSetPasscode() {
@@ -1997,8 +2076,8 @@
                     body: JSON.stringify({passcode})
                 });
                 err.style.display = 'none';
-                goToScreen('screen-qr');
-                startQRLogin();
+                goToScreen('screen-setup');
+                document.getElementById('api-key-input').focus();
             } catch (e) {
                 err.textContent = 'Failed to set passcode';
                 err.style.display = 'block';
@@ -2015,14 +2094,8 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({api_key: key})
                 });
-                const auth = await api('/api/auth/check');
-                if (!auth.has_passcode) {
-                    goToScreen('screen-set-passcode');
-                    document.getElementById('passcode-input').focus();
-                } else {
-                    goToScreen('screen-qr');
-                    startQRLogin();
-                }
+                goToScreen('screen-qr');
+                startQRLogin();
             } catch (e) {
                 alert('Failed to save key: ' + e.message);
             }
@@ -2037,12 +2110,18 @@
                 if (data.qr) {
                     display.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.qr)}" width="200" height="200" style="border-radius: 4px;" />`;
                 } else if (data.connected) {
-                    evtSource.close();
                     goToScreen('screen-connecting');
+                    resetConnectingStages();
+                    setConnectingStage('connected');
+                } else if (data.stage) {
+                    setConnectingStage(data.stage);
+                } else if (data.done) {
+                    evtSource.close();
                     setTimeout(() => {
                         goToScreen('screen-main');
+                        loadUserName();
                         loadDashboard();
-                    }, 1500);
+                    }, 1000);
                 } else if (data.error) {
                     display.innerHTML = `<div style="color: var(--danger); font-size: 13px;">${data.error}. <a href="#" onclick="startQRLogin(); return false;">Retry</a></div>`;
                     evtSource.close();
@@ -2051,6 +2130,40 @@
             evtSource.onerror = () => {
                 evtSource.close();
             };
+        }
+
+        function resetConnectingStages() {
+            document.querySelectorAll('.connecting-stage').forEach(el => {
+                el.classList.remove('active', 'done');
+            });
+            document.getElementById('connecting-title').textContent = 'Setting up...';
+        }
+
+        function setConnectingStage(stage) {
+            const stages = ['connected', 'scanning', 'ready'];
+            const idx = stages.indexOf(stage);
+            if (idx === -1) return;
+
+            stages.forEach((s, i) => {
+                const el = document.getElementById('stage-' + s);
+                if (i < idx) {
+                    el.classList.remove('active');
+                    el.classList.add('done');
+                } else if (i === idx) {
+                    el.classList.remove('done');
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active', 'done');
+                }
+            });
+
+            if (stage === 'ready') {
+                setTimeout(() => {
+                    document.getElementById('stage-ready').classList.remove('active');
+                    document.getElementById('stage-ready').classList.add('done');
+                    document.getElementById('connecting-title').textContent = 'All set!';
+                }, 500);
+            }
         }
 
         // ── Dashboard ──
