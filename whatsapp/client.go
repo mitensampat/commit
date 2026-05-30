@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"strings"
+
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -168,6 +170,8 @@ func (c *Client) handleEvent(rawEvt interface{}) {
 		if !c.handleBotCommand(context.Background(), evt) {
 			c.handleMessage(evt)
 		}
+	case *events.HistorySync:
+		go c.handleHistorySync(evt)
 	case *events.Connected:
 		log.Println("WhatsApp connected")
 		c.mu.Lock()
@@ -357,5 +361,86 @@ func (c *Client) Logout() error {
 	os.Remove(dbPath + "-wal")
 	os.Remove(dbPath + "-shm")
 	return nil
+}
+
+func (c *Client) handleHistorySync(evt *events.HistorySync) {
+	data := evt.Data
+	if data == nil {
+		return
+	}
+	conversations := data.GetConversations()
+	if len(conversations) == 0 {
+		return
+	}
+
+	count := 0
+	for _, conv := range conversations {
+		chatJID := conv.GetID()
+		if chatJID == "" || chatJID == "status@broadcast" {
+			continue
+		}
+		isGroup := strings.HasSuffix(chatJID, "@g.us")
+		chatName := conv.GetDisplayName()
+		if chatName == "" {
+			chatName = conv.GetName()
+		}
+
+		for _, histMsg := range conv.GetMessages() {
+			webMsg := histMsg.GetMessage()
+			if webMsg == nil || webMsg.GetMessage() == nil {
+				continue
+			}
+			key := webMsg.GetKey()
+			if key == nil {
+				continue
+			}
+
+			text := extractText(webMsg.GetMessage())
+			if text == "" {
+				continue
+			}
+
+			ts := webMsg.GetMessageTimestamp()
+			if ts == 0 {
+				continue
+			}
+
+			senderName := webMsg.GetPushName()
+			isFromMe := key.GetFromMe()
+			senderJID := key.GetParticipant()
+			if senderJID == "" && !isGroup {
+				if isFromMe {
+					ownJID := c.GetOwnJID()
+					if !ownJID.IsEmpty() {
+						senderJID = ownJID.String()
+					}
+				} else {
+					senderJID = chatJID
+				}
+			}
+
+			if chatName == "" && !isGroup && !isFromMe {
+				chatName = senderName
+			}
+
+			msg := &store.Message{
+				ID:         key.GetID(),
+				ChatJID:    chatJID,
+				SenderJID:  senderJID,
+				SenderName: senderName,
+				ChatName:   chatName,
+				Content:    text,
+				Timestamp:  time.Unix(int64(ts), 0),
+				IsFromMe:   isFromMe,
+				IsGroup:    isGroup,
+			}
+			if err := c.db.SaveMessage(msg); err == nil {
+				count++
+			}
+		}
+	}
+	if count > 0 {
+		log.Printf("history sync: saved %d messages from %d conversations", count, len(conversations))
+	}
 }
 
