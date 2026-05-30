@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -110,6 +111,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.mu.Unlock()
 
 	go c.extractor.StartProcessingLoop(ctx)
+	go c.reminderLoop(ctx)
 
 	<-ctx.Done()
 	client.Disconnect()
@@ -151,6 +153,7 @@ func (c *Client) Login(ctx context.Context) (<-chan string, error) {
 				c.connected = true
 				c.mu.Unlock()
 				go c.extractor.StartProcessingLoop(c.appCtx)
+				go c.reminderLoop(c.appCtx)
 				return
 			}
 		}
@@ -302,6 +305,40 @@ func extractText(msg *waE2E.Message) string {
 		return *msg.ExtendedTextMessage.Text
 	}
 	return ""
+}
+
+func (c *Client) reminderLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			due, err := c.db.GetDueReminders()
+			if err != nil {
+				log.Printf("reminder check error: %v", err)
+				continue
+			}
+			for _, cm := range due {
+				direction := "You promised"
+				if cm.Direction == "they_owe" {
+					direction = cm.PersonName + " promised"
+				}
+				text := fmt.Sprintf("⏰ Reminder: %s — %s\n\n%s", cm.Title, direction, cm.Context)
+
+				ownJID := c.GetOwnJID()
+				if !ownJID.IsEmpty() {
+					selfJID := types.NewJID(ownJID.User, types.DefaultUserServer)
+					if err := c.SendMessage(ctx, selfJID, text); err != nil {
+						log.Printf("send reminder error: %v", err)
+						continue
+					}
+				}
+				c.db.ClearReminder(cm.ID)
+			}
+		}
+	}
 }
 
 // Logout disconnects and removes the session

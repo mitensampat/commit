@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/msfoundry/commit/store"
 	"github.com/msfoundry/commit/whatsapp"
@@ -75,6 +76,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/favorites/chat", s.requireAuth(s.handleToggleChatFavorite))
 	s.mux.HandleFunc("/api/followups", s.requireAuth(s.handleFollowUps))
 	s.mux.HandleFunc("/api/followups/nudge", s.requireAuth(s.handleNudge))
+	s.mux.HandleFunc("/api/commitments/remind", s.requireAuth(s.handleSetReminder))
 	s.mux.HandleFunc("/api/logout", s.requireAuth(s.handleLogout))
 }
 
@@ -377,6 +379,45 @@ func (s *Server) handleUpdateCommitment(w http.ResponseWriter, r *http.Request) 
 	if err := s.db.UpdateCommitmentStatus(body.ID, body.Status); err != nil {
 		http.Error(w, "update failed", 500)
 		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleSetReminder(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		ID        string `json:"id"`
+		RemindAt  string `json:"remind_at"` // ISO 8601 or empty to clear
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", 400)
+		return
+	}
+	if body.ID == "" {
+		http.Error(w, "id required", 400)
+		return
+	}
+	if body.RemindAt == "" {
+		if err := s.db.ClearReminder(body.ID); err != nil {
+			http.Error(w, "clear failed", 500)
+			return
+		}
+	} else {
+		t, err := time.Parse(time.RFC3339, body.RemindAt)
+		if err != nil {
+			t, err = time.Parse("2006-01-02T15:04", body.RemindAt)
+			if err != nil {
+				http.Error(w, "invalid remind_at format", 400)
+				return
+			}
+		}
+		if err := s.db.SetReminder(body.ID, t); err != nil {
+			http.Error(w, "set failed", 500)
+			return
+		}
 	}
 	writeJSON(w, map[string]any{"ok": true})
 }

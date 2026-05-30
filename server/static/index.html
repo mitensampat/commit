@@ -827,6 +827,141 @@
             opacity: 0;
         }
 
+        .reminder-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px;
+            color: var(--ink-faint);
+            transition: all 0.15s;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .reminder-btn:hover { color: var(--accent); }
+        .reminder-btn.active { color: var(--accent); opacity: 1; }
+        .reminder-btn svg { width: 16px; height: 16px; }
+        .commitment-card:not(:hover) .reminder-btn:not(.active) { opacity: 0; }
+
+        .reminder-popover {
+            position: fixed;
+            z-index: 1000;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 6px;
+            min-width: 200px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+            animation: reminderFadeIn 0.12s ease-out;
+        }
+        @keyframes reminderFadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .reminder-popover-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--ink-tertiary);
+            padding: 6px 10px 4px;
+        }
+        .reminder-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            font-size: 13px;
+            color: var(--ink-primary);
+            transition: background 0.1s;
+        }
+        .reminder-option:hover {
+            background: var(--bg-secondary);
+        }
+        .reminder-option .ro-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .reminder-option .ro-label {
+            font-weight: 500;
+        }
+        .reminder-option .ro-detail {
+            font-size: 11px;
+            color: var(--ink-tertiary);
+            margin-top: 1px;
+        }
+        .reminder-divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 4px 10px;
+        }
+        .reminder-custom-row {
+            display: flex;
+            gap: 6px;
+            padding: 6px 10px 4px;
+        }
+        .reminder-custom-row input[type="datetime-local"] {
+            flex: 1;
+            font-size: 12px;
+            padding: 6px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            color: var(--ink-primary);
+            font-family: inherit;
+        }
+        .reminder-custom-row button {
+            font-size: 12px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: none;
+            background: var(--ink-primary);
+            color: var(--bg-primary);
+            font-weight: 500;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+        .reminder-cancel {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            font-size: 13px;
+            color: var(--danger, #d33);
+            transition: background 0.1s;
+        }
+        .reminder-cancel:hover { background: var(--bg-secondary); }
+
+        .reminder-tag {
+            font-size: 11px;
+            color: var(--accent);
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            cursor: pointer;
+        }
+        .reminder-tag:hover { text-decoration: underline; }
+        .reminder-tag svg { width: 11px; height: 11px; }
+
         .group-fav-btn {
             opacity: 0;
             margin-left: -4px;
@@ -1232,7 +1367,10 @@
             }
             .commitment-actions .action-btn { flex: 1; justify-content: center; }
             .favorite-btn { position: absolute; top: 12px; right: 14px; opacity: 1 !important; }
+            .reminder-btn { position: absolute; top: 12px; right: 36px; opacity: 1 !important; }
             .commitment-card:not(:hover) .favorite-btn:not(.active) { opacity: 1; }
+            .commitment-card:not(:hover) .reminder-btn:not(.active) { opacity: 1; }
+            .reminder-popover { position: fixed; left: 16px !important; right: 16px !important; top: auto !important; bottom: 16px !important; min-width: auto; }
             .group-fav-btn { opacity: 1; position: static; }
         }
 
@@ -2270,6 +2408,10 @@
                     const age = commitmentAge(c.created_at);
                     const ageHtml = !isResolved ? `<span class="commitment-age ${age.cls}">${age.text}</span>` : '';
                     const resolvedTimeHtml = isResolved && c.resolved_at ? `<span class="commitment-age">${timeAgo(c.resolved_at)}</span>` : '';
+                    const hasReminder = c.reminder_at && new Date(c.reminder_at) > new Date();
+                    const bellClass = hasReminder ? 'active' : '';
+                    const bellSvg = `<svg viewBox="0 0 24 24" fill="${hasReminder ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+                    const reminderHtml = hasReminder ? `<span class="reminder-tag" data-reminder-id="${c.id}"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>${formatReminderTime(c.reminder_at)}</span>` : '';
 
                     html += `<div class="${cardClass}" data-direction="${dirClass}" data-search="${esc(c.title)} ${esc(c.context)} ${esc(c.person_name)}" id="card-${c.id}">
                         <div class="commitment-top">
@@ -2284,9 +2426,11 @@
                                     ${!isResolved && c.due_hint ? `<span class="commitment-age">${esc(c.due_hint)}</span>` : ''}
                                     ${ageHtml}
                                     ${resolvedTimeHtml}
+                                    ${reminderHtml}
                                 </div>
                             </div>
-                            ${!isResolved ? `<button class="favorite-btn ${starClass}" onclick="toggleFavorite('${c.id}')">${starSvg}</button>
+                            ${!isResolved ? `<button class="reminder-btn ${bellClass}" data-reminder-id="${c.id}">${bellSvg}</button>
+                            <button class="favorite-btn ${starClass}" onclick="toggleFavorite('${c.id}')">${starSvg}</button>
                             <div class="commitment-actions">
                                 <button class="action-btn" onclick="showReply('${c.id}','${esc(c.chat_jid)}')">Reply</button>
                                 <button class="action-btn done" onclick="updateStatus('${c.id}','resolved')">Done</button>
@@ -2342,6 +2486,164 @@
                 console.error('update error:', e);
             }
         }
+
+        function formatReminderTime(dateStr) {
+            const d = new Date(dateStr);
+            const now = new Date();
+            const diffMs = d - now;
+            const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            if (diffHrs < 1) return 'in <1h';
+            if (diffHrs < 24) return 'in ' + diffHrs + 'h';
+            if (diffDays < 7) return 'in ' + diffDays + 'd';
+            return d.toLocaleDateString(undefined, {month:'short', day:'numeric'});
+        }
+
+        function toggleReminderPicker(id) {
+            const existing = document.getElementById('reminder-popover');
+            if (existing) { existing.remove(); return; }
+
+            const btn = document.querySelector('#card-' + id + ' .reminder-btn');
+            if (!btn) return;
+            const rect = btn.getBoundingClientRect();
+
+            const now = new Date();
+            const presets = [];
+
+            const inOneHour = new Date(now.getTime() + 60*60*1000);
+            presets.push({ label: 'In 1 hour', detail: formatPresetTime(inOneHour), iso: toLocalISO(inOneHour), icon: '1h' });
+
+            const laterToday = new Date(now);
+            laterToday.setHours(18, 0, 0, 0);
+            if (laterToday > now) {
+                presets.push({ label: 'Later today', detail: 'Today at 6:00 PM', iso: toLocalISO(laterToday), icon: 'PM' });
+            }
+
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(9, 0, 0, 0);
+            presets.push({ label: 'Tomorrow morning', detail: formatPresetDate(tomorrow) + ' at 9:00 AM', iso: toLocalISO(tomorrow), icon: 'AM' });
+
+            const in3days = new Date(now);
+            in3days.setDate(in3days.getDate() + 3);
+            in3days.setHours(9, 0, 0, 0);
+            presets.push({ label: 'In 3 days', detail: formatPresetDate(in3days) + ' at 9:00 AM', iso: toLocalISO(in3days), icon: '3d' });
+
+            const nextMon = new Date(now);
+            nextMon.setDate(nextMon.getDate() + ((8 - nextMon.getDay()) % 7 || 7));
+            nextMon.setHours(9, 0, 0, 0);
+            presets.push({ label: 'Next Monday', detail: formatPresetDate(nextMon) + ' at 9:00 AM', iso: toLocalISO(nextMon), icon: 'Mo' });
+
+            const card = document.querySelector('#card-' + id);
+            const hasExisting = card && card.querySelector('.reminder-tag');
+
+            let html = `<div class="reminder-popover-title">Remind me</div>`;
+            for (const p of presets) {
+                html += `<button class="reminder-option" onclick="setReminderPreset('${id}','${p.iso}')">
+                    <span class="ro-icon">${p.icon}</span>
+                    <span><span class="ro-label">${p.label}</span><div class="ro-detail">${p.detail}</div></span>
+                </button>`;
+            }
+            html += `<div class="reminder-divider"></div>`;
+            html += `<div class="reminder-popover-title">Custom</div>`;
+            const minVal = now.toISOString().slice(0,16);
+            const defaultVal = toLocalISO(tomorrow);
+            html += `<div class="reminder-custom-row">
+                <input type="datetime-local" value="${defaultVal}" min="${minVal}">
+                <button onclick="setReminderCustom('${id}',this)">Set</button>
+            </div>`;
+            if (hasExisting) {
+                html += `<div class="reminder-divider"></div>`;
+                html += `<button class="reminder-cancel" onclick="clearReminder('${id}')">Cancel reminder</button>`;
+            }
+
+            const popover = document.createElement('div');
+            popover.className = 'reminder-popover';
+            popover.id = 'reminder-popover';
+            popover.innerHTML = html;
+            popover.addEventListener('click', e => e.stopPropagation());
+            document.body.appendChild(popover);
+
+            const pw = popover.offsetWidth;
+            const ph = popover.offsetHeight;
+            let top = rect.bottom + 6;
+            let left = rect.right - pw;
+            if (top + ph > window.innerHeight - 16) top = rect.top - ph - 6;
+            if (left < 16) left = 16;
+            popover.style.top = top + 'px';
+            popover.style.left = left + 'px';
+        }
+
+        function toLocalISO(d) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        function formatPresetTime(d) {
+            return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        }
+
+        function formatPresetDate(d) {
+            return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        }
+
+        async function setReminderPreset(id, iso) {
+            const popover = document.getElementById('reminder-popover');
+            if (popover) popover.remove();
+            try {
+                await api('/api/commitments/remind', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id, remind_at: iso})
+                });
+                loadDashboard();
+            } catch(e) { console.error('set reminder error:', e); }
+        }
+
+        async function setReminderCustom(id, btnEl) {
+            const input = btnEl.previousElementSibling;
+            if (!input || !input.value) return;
+            const popover = document.getElementById('reminder-popover');
+            if (popover) popover.remove();
+            try {
+                await api('/api/commitments/remind', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id, remind_at: input.value})
+                });
+                loadDashboard();
+            } catch(e) { console.error('set reminder error:', e); }
+        }
+
+        async function clearReminder(id) {
+            const popover = document.getElementById('reminder-popover');
+            if (popover) popover.remove();
+            try {
+                await api('/api/commitments/remind', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id, remind_at: ''})
+                });
+                loadDashboard();
+            } catch(e) { console.error('clear reminder error:', e); }
+        }
+
+        document.addEventListener('click', (e) => {
+            const bellBtn = e.target.closest('.reminder-btn[data-reminder-id]');
+            if (bellBtn) {
+                e.stopPropagation();
+                toggleReminderPicker(bellBtn.dataset.reminderId);
+                return;
+            }
+            const reminderTag = e.target.closest('.reminder-tag[data-reminder-id]');
+            if (reminderTag) {
+                e.stopPropagation();
+                toggleReminderPicker(reminderTag.dataset.reminderId);
+                return;
+            }
+            const p = document.getElementById('reminder-popover');
+            if (p && !p.contains(e.target)) p.remove();
+        });
 
         // ── Tabs ──
         function switchTab(tab, el) {

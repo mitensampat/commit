@@ -98,6 +98,7 @@ func (db *DB) migrate() error {
 	db.conn.Exec("ALTER TABLE commitments ADD COLUMN favorited INTEGER NOT NULL DEFAULT 0")
 	db.conn.Exec("ALTER TABLE commitments ADD COLUMN resolved_by TEXT NOT NULL DEFAULT 'user'")
 	db.conn.Exec("ALTER TABLE commitments ADD COLUMN last_nudged_at INTEGER")
+	db.conn.Exec("ALTER TABLE commitments ADD COLUMN reminder_at INTEGER")
 	return nil
 }
 
