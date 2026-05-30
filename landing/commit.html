@@ -61,6 +61,209 @@
   li { margin-bottom: 4px; }
   .reveal { display: none; margin-top: 12px; }
   .link { cursor: pointer; text-decoration: underline; }
+
+  /* ===== Screen mocks ===== */
+  .screens {
+    margin: 48px -60px 36px;
+    padding: 0 60px;
+  }
+  .screens-label { font-weight: 600; margin-bottom: 20px; }
+  .stage {
+    display: flex;
+    gap: 28px;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  .phone {
+    position: relative;
+    width: 200px;
+    flex-shrink: 0;
+    background: #f0f0f0;
+    border: 1px solid #d0d8e0;
+    border-radius: 24px;
+    padding: 6px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  .phone-screen {
+    position: relative;
+    width: 100%;
+    height: 400px;
+    border-radius: 18px;
+    overflow: hidden;
+    background: #f5f6f8;
+  }
+  .phone-track {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    will-change: transform;
+    transition: transform 1s cubic-bezier(.7, 0, .25, 1);
+  }
+  .phone-track > * {
+    width: 100%;
+    height: 100%;
+    flex-shrink: 0;
+  }
+  .desktop {
+    flex: 1;
+    min-width: 0;
+    background: #f0f0f0;
+    border: 1px solid #d0d8e0;
+    border-radius: 8px;
+    padding: 6px 6px 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  .desktop-chrome {
+    display: flex; gap: 4px;
+    padding: 3px 3px 6px;
+  }
+  .desktop-chrome span {
+    width: 7px; height: 7px; border-radius: 50%;
+  }
+  .desktop-chrome span:nth-child(1) { background: #ff5f57; }
+  .desktop-chrome span:nth-child(2) { background: #febc2e; }
+  .desktop-chrome span:nth-child(3) { background: #28c840; }
+  .desktop-screen {
+    width: 100%;
+    min-height: 200px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #f5f6f8;
+  }
+  .desktop-screen > * { height: auto; min-height: 200px; width: 100%; }
+  .screen-caption {
+    text-align: center;
+    font-size: 13px;
+    color: #8090a8;
+    margin-top: 16px;
+  }
+
+  /* ===== Synthetic screen styles ===== */
+  .screen {
+    background: #f5f6f8;
+    color: #1a1f25;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    font-size: 11px;
+    line-height: 1.4;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .s-topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 10px;
+    border-bottom: 1px solid #c8ced6;
+    background: #fff;
+  }
+  .s-topbar-left { display: flex; align-items: center; gap: 5px; }
+  .s-topbar-logo { font-size: 11px; font-weight: 600; color: #1a1f25; }
+  .s-topbar-status { display: flex; align-items: center; gap: 3px; font-size: 8px; color: #6e7681; }
+  .s-topbar-dot { width: 4px; height: 4px; border-radius: 50%; background: #1a6b3a; }
+  .s-topbar-right { font-size: 8px; color: #6e7681; }
+  .s-search {
+    margin: 6px 10px 0; padding: 4px 8px;
+    border: 1px solid #c8ced6; border-radius: 5px;
+    background: #fff; font-size: 8px; color: #9ea7b3;
+  }
+  .s-tabs {
+    display: flex; gap: 2px; padding: 6px 10px 0;
+    font-size: 8px; font-weight: 500; color: #6e7681;
+  }
+  .s-tab {
+    padding: 3px 6px; border-radius: 3px;
+    display: flex; align-items: center; gap: 2px;
+  }
+  .s-tab.active { background: #1a1f25; color: #f5f6f8; }
+  .s-tab .cnt {
+    font-size: 7px; background: #eceef2;
+    padding: 0 4px; border-radius: 6px; color: #6e7681;
+  }
+  .s-tab.active .cnt { background: rgba(255,255,255,0.2); color: #f5f6f8; }
+  .s-stats {
+    display: flex; gap: 10px; padding: 6px 10px;
+    font-size: 8px; color: #6e7681;
+    border-bottom: 1px solid #eceef2;
+  }
+  .s-stat-val { font-size: 12px; font-weight: 500; color: #1a1f25; }
+  .s-body { flex: 1; overflow: hidden; padding: 0 10px 10px; }
+  .s-group-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0 3px;
+  }
+  .s-group-left { display: flex; align-items: center; gap: 5px; }
+  .s-avatar {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #eceef2; color: #6e7681;
+    font-size: 7px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .s-group-name { font-size: 10px; font-weight: 500; color: #1a1f25; }
+  .s-group-meta { font-size: 8px; color: #9ea7b3; }
+  .s-group-badge {
+    font-size: 7px; font-weight: 600;
+    padding: 1px 5px; border-radius: 3px;
+  }
+  .s-group-badge.you-owe { color: #a12535; background: #f4e4e6; }
+  .s-group-badge.they-owe { color: #1a6b3a; background: #dceee2; }
+  .s-card {
+    background: #fff; border: 1px solid #c8ced6;
+    padding: 6px 8px;
+  }
+  .s-card:first-of-type { border-radius: 5px 5px 0 0; }
+  .s-card:last-of-type { border-radius: 0 0 5px 5px; }
+  .s-card:only-of-type { border-radius: 5px; }
+  .s-card + .s-card { border-top: none; }
+  .s-card-title { font-size: 9px; font-weight: 500; color: #1a1f25; line-height: 1.4; }
+  .s-card-context { font-size: 8px; color: #444b55; margin-top: 1px; }
+  .s-card-quote {
+    font-size: 7.5px; color: #6e7681; font-style: italic;
+    background: #eceef2; border-radius: 3px;
+    padding: 3px 6px; margin-top: 3px; line-height: 1.4;
+  }
+  .s-card-meta { display: flex; align-items: center; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
+  .s-dir {
+    font-size: 7px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.03em; padding: 1px 5px; border-radius: 3px;
+  }
+  .s-dir.you-owe { color: #a12535; background: #f4e4e6; }
+  .s-dir.they-owe { color: #1a6b3a; background: #dceee2; }
+  .s-age { font-size: 7px; color: #9ea7b3; }
+  .s-age.stale { color: #9a7d3a; }
+  .s-age.overdue { color: #a12535; }
+  .s-actions { display: flex; gap: 3px; margin-top: 4px; }
+  .s-actions span {
+    font-size: 7px; color: #444b55;
+    border: 1px solid #c8ced6; padding: 1px 6px;
+    border-radius: 3px; background: #fff;
+  }
+  .s-auto-badge {
+    font-size: 6.5px; padding: 1px 4px; border-radius: 3px;
+    background: #dceee2; color: #1a6b3a;
+  }
+  .s-resolved-title {
+    font-size: 9px; font-weight: 500; color: #9ea7b3;
+    text-decoration: line-through; line-height: 1.4;
+  }
+  .screen-desktop .s-topbar { padding: 8px 16px; }
+  .screen-desktop .s-topbar-logo { font-size: 13px; }
+  .screen-desktop .s-search { margin: 8px 16px 0; padding: 6px 10px; font-size: 10px; }
+  .screen-desktop .s-tabs { padding: 8px 16px 0; font-size: 9px; }
+  .screen-desktop .s-stats { padding: 8px 16px; font-size: 9px; }
+  .screen-desktop .s-stat-val { font-size: 14px; }
+  .screen-desktop .s-body { padding: 0 16px 16px; }
+  .screen-desktop .s-group-name { font-size: 12px; }
+  .screen-desktop .s-card-title { font-size: 11px; }
+  .screen-desktop .s-card-context { font-size: 9px; }
+  .screen-desktop .s-card-quote { font-size: 8.5px; }
+  .screen-desktop .s-dir { font-size: 8px; }
+  .screen-desktop .s-age { font-size: 8px; }
+  .screen-desktop .s-actions span { font-size: 8px; }
+
+  @media (max-width: 600px) {
+    .stage { flex-direction: column; align-items: center; }
+    .desktop { display: none; }
+    .phone { width: 240px; }
+    .phone-screen { height: 480px; }
+  }
 </style>
 </head>
 <body>
@@ -84,12 +287,6 @@
 </div>
 
 <div class="section">
-<p><b>a note on privacy</b></p>
-<p>messages are decrypted on your machine and stored in a local SQLite database. nothing is uploaded to a server by Commit.</p>
-<p>message content is sent to the Claude API for commitment extraction. <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#data-retention-and-privacy">Anthropic does not train on API inputs.</a></p>
-</div>
-
-<div class="section">
 <p><b>features</b></p>
 <ol>
 <li>auto-extraction and auto-resolution of commitments</li>
@@ -103,8 +300,32 @@
 </div>
 
 <div class="section">
+<p><b>a note on privacy</b></p>
+<p>messages are decrypted on your machine and stored in a local SQLite database. nothing is uploaded to a server by Commit.</p>
+<p>message content is sent to the Claude API for commitment extraction. <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#data-retention-and-privacy">Anthropic does not train on API inputs.</a></p>
+</div>
+
+<div class="section">
 <p><b>requirements</b></p>
 <p>macOS 12+ or Windows 10+. a WhatsApp account. a <a href="https://console.anthropic.com/">Claude API key</a>.</p>
+</div>
+
+<hr>
+
+<div class="screens">
+<p class="screens-label">see it in action</p>
+<div class="stage">
+  <div class="phone">
+    <div class="phone-screen">
+      <div class="phone-track" id="phone-track"></div>
+    </div>
+  </div>
+  <div class="desktop">
+    <div class="desktop-chrome"><span></span><span></span><span></span></div>
+    <div class="desktop-screen" id="desktop-screen"></div>
+  </div>
+</div>
+<p class="screen-caption">mobile and desktop — same data, same dashboard</p>
 </div>
 
 <hr>
@@ -129,6 +350,24 @@ function updateClock() {
 }
 updateClock();
 setInterval(updateClock, 60000);
+
+var SCREENS = {
+  dashboard: '<div class="screen"><div class="s-topbar"><div class="s-topbar-left"><span class="s-topbar-logo">Commit</span><div class="s-topbar-status"><div class="s-topbar-dot"></div>Connected</div></div><div class="s-topbar-right">Settings</div></div><div class="s-search">Search commitments, people, or groups...</div><div class="s-tabs"><div class="s-tab active">All <span class="cnt">12</span></div><div class="s-tab">Follow ups <span class="cnt">3</span></div><div class="s-tab">I owe <span class="cnt">6</span></div><div class="s-tab">They owe <span class="cnt">6</span></div></div><div class="s-stats"><div><span class="s-stat-val">12</span> open</div><div><span class="s-stat-val">6</span> you owe</div><div><span class="s-stat-val">6</span> they owe</div></div><div class="s-body"><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">AP</div><span class="s-group-name">Alex Park</span><span class="s-group-meta">2 open</span></div><div><span class="s-group-badge you-owe">1 you owe</span> <span class="s-group-badge they-owe">1 they owe</span></div></div><div class="s-card" style="border-radius:5px 5px 0 0;"><div class="s-card-title">Send the cap table by Friday</div><div class="s-card-quote">&ldquo;I\'ll send the cap table by Friday&rdquo; May 26, 3:12 PM</div><div class="s-card-meta"><span class="s-dir you-owe">You owe</span><span class="s-age stale">3d</span></div></div><div class="s-card" style="border-radius:0 0 5px 5px;"><div class="s-card-title">Intro to the Helio team</div><div class="s-card-quote">&ldquo;will introduce you to the Helio team this week&rdquo; May 22</div><div class="s-card-meta"><span class="s-dir they-owe">They owe</span><span class="s-age overdue">5d</span></div></div><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">SR</div><span class="s-group-name">Sam Rivera</span><span class="s-group-meta">2 open</span></div><div><span class="s-group-badge you-owe">1 you owe</span> <span class="s-group-badge they-owe">1 they owe</span></div></div><div class="s-card" style="border-radius:5px 5px 0 0;"><div class="s-card-title">Review the Q3 budget draft</div><div class="s-card-meta"><span class="s-dir you-owe">You owe</span><span class="s-age">1d</span></div></div><div class="s-card" style="border-radius:0 0 5px 5px;"><div class="s-card-title">Share the vendor shortlist</div><div class="s-card-meta"><span class="s-dir they-owe">They owe</span><span class="s-age stale">6d</span></div></div></div></div>',
+  followups: '<div class="screen"><div class="s-topbar"><div class="s-topbar-left"><span class="s-topbar-logo">Commit</span><div class="s-topbar-status"><div class="s-topbar-dot"></div>Connected</div></div><div class="s-topbar-right">Settings</div></div><div class="s-tabs"><div class="s-tab">All <span class="cnt">12</span></div><div class="s-tab active">Follow ups <span class="cnt">3</span></div><div class="s-tab">I owe</div><div class="s-tab">They owe</div></div><div class="s-body" style="padding-top:6px;"><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">AP</div><span class="s-group-name">Alex Park</span></div><span class="s-age overdue">5d no reply</span></div><div class="s-card" style="border-radius:5px;"><div class="s-card-title">Intro to the Helio team</div><div class="s-card-quote">&ldquo;will introduce you to the Helio team this week&rdquo; May 22</div><div class="s-card-meta"><span class="s-dir they-owe">They owe</span><span class="s-age overdue">5d</span></div><div class="s-actions"><span>Draft nudge</span><span>Dismiss</span></div></div><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">SR</div><span class="s-group-name">Sam Rivera</span></div><span class="s-age stale">6d no reply</span></div><div class="s-card" style="border-radius:5px;"><div class="s-card-title">Share the vendor shortlist</div><div class="s-card-quote">&ldquo;I\'ll share the vendor shortlist by Monday&rdquo; May 21</div><div class="s-card-meta"><span class="s-dir they-owe">They owe</span><span class="s-age stale">6d</span></div><div class="s-actions"><span>Draft nudge</span><span>Dismiss</span></div></div><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">JL</div><span class="s-group-name">Jordan Lee</span></div><span class="s-age overdue">9d no reply</span></div><div class="s-card" style="border-radius:5px;"><div class="s-card-title">Feedback on the Q2 plan</div><div class="s-card-meta"><span class="s-dir they-owe">They owe</span><span class="s-age overdue">9d</span></div><div class="s-actions"><span>Draft nudge</span><span>Dismiss</span></div></div></div></div>',
+  resolved: '<div class="screen"><div class="s-topbar"><div class="s-topbar-left"><span class="s-topbar-logo">Commit</span><div class="s-topbar-status"><div class="s-topbar-dot"></div>Connected</div></div><div class="s-topbar-right">Settings</div></div><div class="s-tabs"><div class="s-tab">All <span class="cnt">12</span></div><div class="s-tab">Follow ups</div><div class="s-tab">I owe</div><div class="s-tab active">Resolved <span class="cnt">25</span></div></div><div class="s-body" style="padding-top:6px;"><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">MC</div><span class="s-group-name">Morgan Chen</span><span class="s-group-meta">1 closed</span></div></div><div class="s-card" style="border-radius:5px;"><div class="s-resolved-title">Draft the offer letter and send for review</div><div class="s-card-meta"><span class="s-dir you-owe">You owe</span><span class="s-auto-badge">auto-closed</span><span class="s-age">2d ago</span></div></div><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">AP</div><span class="s-group-name">Alex Park</span><span class="s-group-meta">1 closed</span></div></div><div class="s-card" style="border-radius:5px;"><div class="s-resolved-title">Share the updated term sheet</div><div class="s-card-meta"><span class="s-dir they-owe">They owe</span><span class="s-auto-badge">auto-closed</span><span class="s-age">3d ago</span></div></div><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">JT</div><span class="s-group-name">Jamie Torres</span><span class="s-group-meta">1 closed</span></div></div><div class="s-card" style="border-radius:5px;"><div class="s-resolved-title">Let\'s grab coffee next week</div><div class="s-card-meta"><span class="s-age">dismissed &middot; 4d ago</span></div></div></div></div>'
+};
+
+var desktopHTML = '<div class="screen screen-desktop"><div class="s-topbar"><div class="s-topbar-left"><span class="s-topbar-logo">Commit</span><div class="s-topbar-status"><div class="s-topbar-dot"></div>Connected</div></div><div class="s-topbar-right">Settings</div></div><div class="s-search">Search commitments, people, or groups...</div><div class="s-tabs"><div class="s-tab active">All <span class="cnt">12</span></div><div class="s-tab">Follow ups <span class="cnt">3</span></div><div class="s-tab">Favorites <span class="cnt">5</span></div><div class="s-tab">I owe <span class="cnt">6</span></div><div class="s-tab">They owe <span class="cnt">6</span></div><div class="s-tab">Resolved <span class="cnt">25</span></div></div><div class="s-stats"><div><span class="s-stat-val">12</span> open</div><div><span class="s-stat-val">6</span> you owe</div><div><span class="s-stat-val">6</span> they owe</div></div><div class="s-body"><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">AP</div><span class="s-group-name">Alex Park</span><span class="s-group-meta">2 open</span></div><div><span class="s-group-badge you-owe">1 you owe</span> <span class="s-group-badge they-owe">1 they owe</span></div></div><div class="s-card" style="border-radius:5px 5px 0 0;"><div class="s-card-title">Send the cap table by Friday</div><div class="s-card-context">Alex needs the updated cap table for the board deck.</div><div class="s-card-quote">&ldquo;I\'ll send the cap table by Friday&rdquo; May 26, 3:12 PM</div><div class="s-card-meta"><span class="s-dir you-owe">You owe</span><span class="s-age stale">3d</span></div><div class="s-actions"><span>Reply</span><span>Done</span><span>Dismiss</span></div></div><div class="s-card" style="border-radius:0 0 5px 5px;"><div class="s-card-title">Intro to the Helio team</div><div class="s-card-quote">&ldquo;will introduce you to the Helio team this week&rdquo; May 22</div><div class="s-card-meta"><span class="s-dir they-owe">They owe</span><span class="s-age overdue">5d</span></div><div class="s-actions"><span>Reply</span><span>Done</span><span>Dismiss</span></div></div><div class="s-group-header"><div class="s-group-left"><div class="s-avatar">SR</div><span class="s-group-name">Sam Rivera</span><span class="s-group-meta">2 open</span></div><div><span class="s-group-badge you-owe">1 you owe</span> <span class="s-group-badge they-owe">1 they owe</span></div></div><div class="s-card" style="border-radius:5px 5px 0 0;"><div class="s-card-title">Review the Q3 budget draft</div><div class="s-card-meta"><span class="s-dir you-owe">You owe</span><span class="s-age">1d</span></div><div class="s-actions"><span>Reply</span><span>Done</span><span>Dismiss</span></div></div><div class="s-card" style="border-radius:0 0 5px 5px;"><div class="s-card-title">Share the vendor shortlist</div><div class="s-card-meta"><span class="s-dir they-owe">They owe</span><span class="s-age stale">6d</span></div><div class="s-actions"><span>Reply</span><span>Done</span><span>Dismiss</span></div></div></div></div>';
+
+var track = document.getElementById('phone-track');
+track.innerHTML = SCREENS.dashboard + SCREENS.followups + SCREENS.resolved;
+document.getElementById('desktop-screen').innerHTML = desktopHTML;
+
+var idx = 0;
+setInterval(function() {
+  idx = (idx + 1) % 3;
+  track.style.transform = 'translateY(-' + (idx * 100) + '%)';
+}, 3400);
 </script>
 </body>
 </html>
