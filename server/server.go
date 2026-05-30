@@ -47,11 +47,12 @@ func New(db *store.DB, wa *whatsapp.Client, ext *extraction.Extractor, port int)
 	s := &Server{db: db, wa: wa, extractor: ext, port: port, startedAt: time.Now()}
 	s.mux = http.NewServeMux()
 	s.registerRoutes()
+	go s.cleanupThrottles()
 	return s
 }
 
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	srv := &http.Server{Handler: s.mux}
+	srv := &http.Server{Handler: s.securityHeaders(s.mux)}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -65,6 +66,41 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	return err
 }
 
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:;")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) cleanupThrottles() {
+	for {
+		time.Sleep(15 * time.Minute)
+		s.loginAttempts.Range(func(key, value any) bool {
+			t := value.(*loginThrottle)
+			if time.Since(t.lastFail) > 15*time.Minute {
+				s.loginAttempts.Delete(key)
+			}
+			return true
+		})
+	}
+}
+
+func (s *Server) requireJSON(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" || r.Method == "PUT" || r.Method == "DELETE" {
+			ct := r.Header.Get("Content-Type")
+			if len(ct) < 16 || ct[:16] != "application/json" {
+				http.Error(w, "Content-Type must be application/json", 415)
+				return
+			}
+		}
+		next(w, r)
+	}
+}
+
 func (s *Server) registerRoutes() {
 	staticSub, _ := fs.Sub(staticFS, "static")
 	s.mux.Handle("/", http.FileServer(http.FS(staticSub)))
@@ -73,8 +109,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/qr", s.handleQR)
 	s.mux.HandleFunc("/api/status", s.handleStatus)
 	s.mux.HandleFunc("/api/auth/check", s.handleAuthCheck)
-	s.mux.HandleFunc("/api/auth/login", s.handleAuthLogin)
-	s.mux.HandleFunc("/api/auth/setup", s.handleAuthSetup)
+	s.mux.HandleFunc("/api/auth/login", s.requireJSON(s.handleAuthLogin))
+	s.mux.HandleFunc("/api/auth/setup", s.requireJSON(s.handleAuthSetup))
 
 	// Protected (auth required)
 	s.mux.HandleFunc("/api/setup", s.requireAuth(s.handleSetup))
@@ -102,16 +138,30 @@ func (s *Server) registerRoutes() {
 
 func (s *Server) generateSession() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
 	token := hex.EncodeToString(b)
 	s.sessions.Store(token, time.Now().Add(24*time.Hour))
 	return token
 }
 
+func (s *Server) sessionCookie(token string, r *http.Request) *http.Cookie {
+	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+	return &http.Cookie{
+		Name:     "commit_session",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   secure,
+	}
+}
+
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.db.HasPasscode() {
-			next(w, r)
+			writeJSON(w, map[string]any{"error": "setup_required", "message": "set a passcode first"})
 			return
 		}
 		cookie, err := r.Cookie("commit_session")
@@ -165,8 +215,8 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", 400)
 		return
 	}
-	if len(body.Passcode) < 4 {
-		http.Error(w, "passcode must be at least 4 characters", 400)
+	if len(body.Passcode) < 6 {
+		http.Error(w, "passcode must be at least 6 characters", 400)
 		return
 	}
 	if err := s.db.SetPasscode(body.Passcode); err != nil {
@@ -181,13 +231,7 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := s.generateSession()
-	http.SetCookie(w, &http.Cookie{
-		Name:     "commit_session",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-	})
+	http.SetCookie(w, s.sessionCookie(token, r))
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -203,7 +247,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", 400)
 		return
 	}
-	ip := r.RemoteAddr
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 	if val, ok := s.loginAttempts.Load(ip); ok {
 		t := val.(*loginThrottle)
 		if t.failures >= 5 && time.Since(t.lastFail) < time.Duration(t.failures)*10*time.Second {
@@ -223,13 +267,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	s.loginAttempts.Delete(ip)
 
 	token := s.generateSession()
-	http.SetCookie(w, &http.Cookie{
-		Name:     "commit_session",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-	})
+	http.SetCookie(w, s.sessionCookie(token, r))
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -237,9 +275,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	hasKey := s.db.GetAPIKey() != ""
 	hasSession := s.wa.HasSession()
 	connected := s.wa.IsConnected()
+	hasPasscode := s.db.HasPasscode()
 
 	state := "needs_setup"
-	if hasKey && !hasSession {
+	if !hasPasscode {
+		state = "needs_passcode"
+	} else if hasKey && !hasSession {
 		state = "needs_login"
 	} else if hasKey && hasSession && !connected {
 		state = "connecting"
@@ -248,10 +289,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{
-		"state":       state,
-		"has_api_key": hasKey,
-		"has_session": hasSession,
-		"connected":   connected,
+		"state": state,
 	})
 }
 

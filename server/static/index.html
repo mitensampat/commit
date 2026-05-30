@@ -2021,20 +2021,25 @@
             } else if (status.state === 'needs_login' || status.state === 'connecting') {
                 goToScreen('screen-qr');
                 startQRLogin();
+            } else if (status.state === 'needs_passcode') {
+                if (!localStorage.getItem('commit_onboarded')) {
+                    goToScreen('screen-onboarding');
+                    return;
+                }
+                goToScreen('screen-set-passcode');
+                document.getElementById('passcode-input').focus();
             } else {
                 if (!localStorage.getItem('commit_onboarded')) {
                     goToScreen('screen-onboarding');
                     return;
                 }
                 const auth = await api('/api/auth/check');
-                if (!auth.has_passcode) {
-                    goToScreen('screen-set-passcode');
-                    document.getElementById('passcode-input').focus();
-                } else if (!status.has_api_key) {
-                    goToScreen('screen-setup');
-                    document.getElementById('api-key-input').focus();
+                if (!auth.authenticated) {
+                    goToScreen('screen-lock');
+                    document.getElementById('lock-input').focus();
                 } else {
                     goToScreen('screen-setup');
+                    document.getElementById('api-key-input').focus();
                 }
             }
         }
@@ -2293,14 +2298,18 @@
             d.textContent = s;
             return d.innerHTML;
         }
+        function escAttr(s) {
+            if (!s) return '';
+            return esc(s).replace(/'/g, '&#39;').replace(/\\/g, '&#92;');
+        }
 
         function showReply(commitmentId, chatJID) {
             const area = document.getElementById('reply-' + commitmentId);
             if (area.classList.contains('hidden')) {
                 area.classList.remove('hidden');
                 area.innerHTML = `<div class="reply-input-row">
-                    <textarea class="reply-input" id="reply-text-${commitmentId}" placeholder="Type a reply..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReply('${commitmentId}','${chatJID}');}"></textarea>
-                    <button class="reply-send-btn" onclick="sendReply('${commitmentId}','${chatJID}')">Send</button>
+                    <textarea class="reply-input" id="reply-text-${escAttr(commitmentId)}" placeholder="Type a reply..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReply('${escAttr(commitmentId)}','${escAttr(chatJID)}');}"></textarea>
+                    <button class="reply-send-btn" onclick="sendReply('${escAttr(commitmentId)}','${escAttr(chatJID)}')">Send</button>
                 </div>`;
                 document.getElementById('reply-text-' + commitmentId).focus();
             } else {
@@ -2329,8 +2338,8 @@
                 area.innerHTML = `<div class="reply-sent">
                     <span>Message sent</span>
                     <div class="reply-sent-actions">
-                        <button class="reply-done-btn" onclick="updateStatus('${commitmentId}','resolved')">Mark done</button>
-                        <button class="reply-dismiss-btn" onclick="closeReply('${commitmentId}')">Close</button>
+                        <button class="reply-done-btn" onclick="updateStatus('${escAttr(commitmentId)}','resolved')">Mark done</button>
+                        <button class="reply-dismiss-btn" onclick="closeReply('${escAttr(commitmentId)}')">Close</button>
                     </div>
                 </div>`;
             } catch (e) {
@@ -2403,7 +2412,7 @@
                     <div class="resolved-section-header">Recently closed</div>`;
                 for (const group of resolvedGroups) {
                     const avatarStyle = group.is_group ? ' style="border-radius: 6px;"' : '';
-                    html += `<div class="commitment-group" data-person="${group.name.toLowerCase()}">
+                    html += `<div class="commitment-group" data-person="${escAttr(group.name.toLowerCase())}">
                         <div class="group-header">
                             <div class="group-header-left">
                                 <div class="group-avatar"${avatarStyle}>${getInitials(group.name)}</div>
@@ -2507,13 +2516,13 @@
                             ${c.context ? `<div class="commitment-context">${esc(c.context)}</div>` : ''}
                             ${c.source_quote ? `<div class="commitment-source">${chatSvg}<div class="source-text"><span class="source-quote">"${esc(c.source_quote)}"</span></div></div>` : ''}
                             <div class="commitment-actions followup-actions">
-                                <button class="action-btn" onclick="nudge('${c.id}','${esc(c.chat_jid)}')">Nudge</button>
-                                <button class="action-btn done" onclick="updateStatus('${c.id}','resolved')">Done</button>
-                                <button class="action-btn" onclick="updateStatus('${c.id}','dismissed')">Dismiss</button>
+                                <button class="action-btn" onclick="nudge('${escAttr(c.id)}','${escAttr(c.chat_jid)}')">Nudge</button>
+                                <button class="action-btn done" onclick="updateStatus('${escAttr(c.id)}','resolved')">Done</button>
+                                <button class="action-btn" onclick="updateStatus('${escAttr(c.id)}','dismissed')">Dismiss</button>
                             </div>
                         </div>
                     </div>
-                    <div class="nudge-area hidden" id="nudge-${c.id}"></div>
+                    <div class="nudge-area hidden" id="nudge-${escAttr(c.id)}"></div>
                 </div>`;
             }
             container.innerHTML = html;
@@ -2536,10 +2545,10 @@
                     body: JSON.stringify({id, action: 'draft'})
                 });
                 area.innerHTML = `<div class="nudge-preview">
-                    <textarea class="reply-input" id="nudge-text-${id}" rows="2">${esc(res.message)}</textarea>
+                    <textarea class="reply-input" id="nudge-text-${escAttr(id)}" rows="2">${esc(res.message)}</textarea>
                     <div style="display: flex; gap: 6px; margin-top: 6px;">
-                        <button class="reply-send-btn" onclick="sendNudge('${id}','${chatJID}')">Send</button>
-                        <button class="action-btn" onclick="document.getElementById('nudge-${id}').classList.add('hidden')">Cancel</button>
+                        <button class="reply-send-btn" onclick="sendNudge('${escAttr(id)}','${escAttr(chatJID)}')">Send</button>
+                        <button class="action-btn" onclick="document.getElementById('nudge-${escAttr(id)}').classList.add('hidden')">Cancel</button>
                     </div>
                 </div>`;
             } catch (e) {
@@ -2608,12 +2617,12 @@
                     metaText += filtered.length + ' open';
                 }
 
-                html += `<div class="commitment-group" data-person="${group.name.toLowerCase()}">
+                html += `<div class="commitment-group" data-person="${escAttr(group.name.toLowerCase())}">
                     <div class="group-header">
                         <div class="group-header-left">
                             <div class="group-avatar"${avatarStyle}>${getInitials(group.name)}</div>
                             <span class="group-name">${esc(group.name)}</span>
-                            <button class="favorite-btn group-fav-btn ${chatStarClass}" onclick="event.stopPropagation();toggleChatFavorite('${esc(group.chat_jid)}','${esc(group.name)}',${group.is_group})"><svg viewBox="0 0 24 24" fill="${chatStarFill}" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+                            <button class="favorite-btn group-fav-btn ${chatStarClass}" onclick="event.stopPropagation();toggleChatFavorite('${escAttr(group.chat_jid)}','${escAttr(group.name)}',${group.is_group})"><svg viewBox="0 0 24 24" fill="${chatStarFill}" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
                             <span class="group-meta">${metaText}</span>
                         </div>
                         <div class="group-header-right">
@@ -2639,9 +2648,9 @@
                     const hasReminder = c.reminder_at && new Date(c.reminder_at) > new Date();
                     const bellClass = hasReminder ? 'active' : '';
                     const bellSvg = `<svg viewBox="0 0 24 24" fill="${hasReminder ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
-                    const reminderHtml = hasReminder ? `<span class="reminder-tag" data-reminder-id="${c.id}"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>${formatReminderTime(c.reminder_at)}</span>` : '';
+                    const reminderHtml = hasReminder ? `<span class="reminder-tag" data-reminder-id="${escAttr(c.id)}"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>${formatReminderTime(c.reminder_at)}</span>` : '';
 
-                    html += `<div class="${cardClass}" data-direction="${dirClass}" data-search="${esc(c.title)} ${esc(c.context)} ${esc(c.person_name)}" id="card-${c.id}">
+                    html += `<div class="${cardClass}" data-direction="${dirClass}" data-search="${escAttr(c.title)} ${escAttr(c.context)} ${escAttr(c.person_name)}" id="card-${escAttr(c.id)}">
                         <div class="commitment-top">
                             <div class="commitment-body">
                                 <div class="commitment-title"${titleStyle}>${esc(c.title)}</div>
@@ -2657,15 +2666,15 @@
                                     ${reminderHtml}
                                 </div>
                             </div>
-                            ${!isResolved ? `<button class="reminder-btn ${bellClass}" data-reminder-id="${c.id}">${bellSvg}</button>
-                            <button class="favorite-btn ${starClass}" onclick="toggleFavorite('${c.id}')">${starSvg}</button>
+                            ${!isResolved ? `<button class="reminder-btn ${bellClass}" data-reminder-id="${escAttr(c.id)}">${bellSvg}</button>
+                            <button class="favorite-btn ${starClass}" onclick="toggleFavorite('${escAttr(c.id)}')">${starSvg}</button>
                             <div class="commitment-actions">
-                                <button class="action-btn" onclick="showReply('${c.id}','${esc(c.chat_jid)}')">Reply</button>
-                                <button class="action-btn done" onclick="updateStatus('${c.id}','resolved')">Done</button>
-                                <button class="action-btn" onclick="updateStatus('${c.id}','dismissed')">Dismiss</button>
+                                <button class="action-btn" onclick="showReply('${escAttr(c.id)}','${escAttr(c.chat_jid)}')">Reply</button>
+                                <button class="action-btn done" onclick="updateStatus('${escAttr(c.id)}','resolved')">Done</button>
+                                <button class="action-btn" onclick="updateStatus('${escAttr(c.id)}','dismissed')">Dismiss</button>
                             </div>` : ''}
                         </div>
-                        ${!isResolved ? `<div class="reply-area hidden" id="reply-${c.id}"></div>` : ''}
+                        ${!isResolved ? `<div class="reply-area hidden" id="reply-${escAttr(c.id)}"></div>` : ''}
                     </div>`;
                 }
                 html += '</div>';
@@ -2787,7 +2796,7 @@
 
             let html = `<div class="reminder-popover-title">Remind me</div>`;
             for (const p of presets) {
-                html += `<button class="reminder-option" onclick="setReminderPreset('${id}','${p.iso}')">
+                html += `<button class="reminder-option" onclick="setReminderPreset('${escAttr(id)}','${escAttr(p.iso)}')">
                     <span class="ro-icon">${p.icon}</span>
                     <span><span class="ro-label">${p.label}</span><div class="ro-detail">${p.detail}</div></span>
                 </button>`;

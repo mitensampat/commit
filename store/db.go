@@ -143,6 +143,7 @@ func (db *DB) SetPasscode(passcode string) error {
 		return err
 	}
 	db.deriveKey(passcode)
+	db.conn.Exec("DELETE FROM settings WHERE key = 'machine_key'")
 	return nil
 }
 
@@ -162,7 +163,7 @@ func (db *DB) deriveKey(passcode string) {
 	saltHex := db.GetSetting("crypto_salt")
 	salt, _ := hex.DecodeString(saltHex)
 	if len(salt) == 0 {
-		salt = []byte("commit-default-salt")
+		return
 	}
 	key := pbkdf2.Key([]byte(passcode), salt, 100000, 32, sha256.New)
 	db.cryptoMu.Lock()
@@ -203,7 +204,7 @@ func (db *DB) encrypt(plaintext string) (string, error) {
 	key := db.cryptoKey
 	db.cryptoMu.RUnlock()
 	if len(key) == 0 {
-		return plaintext, nil
+		return "", fmt.Errorf("no encryption key available")
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {

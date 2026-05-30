@@ -27,6 +27,8 @@ Thumbs.db
 *.dmg
 *.zip
 
-# Environment
+# Environment & credentials
 .env
 *.key
+credentials.json
+token.json
