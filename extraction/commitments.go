@@ -166,12 +166,10 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			continue
 		}
 
-		chatName := chatMsgs[0].ChatName
-		var newTitles []string
 		for _, ec := range result.Commitments {
 			c := &store.Commitment{
 				ChatJID:     chatJID,
-				ChatName:    chatName,
+				ChatName:    chatMsgs[0].ChatName,
 				PersonName:  ec.PersonName,
 				Title:       ec.Title,
 				Context:     ec.Context,
@@ -195,40 +193,14 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			}
 			if err := e.db.SaveCommitment(c); err != nil {
 				log.Printf("save commitment error: %v", err)
-			} else {
-				dir := "You owe"
-				if ec.Direction == "they_owe" {
-					dir = ec.PersonName + " owes"
-				}
-				newTitles = append(newTitles, fmt.Sprintf("• %s — %s", ec.Title, dir))
 			}
 		}
 
-		var resolvedTitles []string
 		for _, resolvedID := range result.Resolved {
 			if err := e.db.AutoResolveCommitment(resolvedID); err != nil {
 				log.Printf("auto-resolve error for %s: %v", resolvedID, err)
 			} else {
 				log.Printf("auto-resolved commitment %s", resolvedID)
-				for _, oc := range openCommitments {
-					if oc.ID == resolvedID {
-						resolvedTitles = append(resolvedTitles, "• "+oc.Title)
-						break
-					}
-				}
-			}
-		}
-
-		if e.notifier != nil {
-			var parts []string
-			if len(newTitles) > 0 {
-				parts = append(parts, fmt.Sprintf("📌 New from %s:\n%s", chatName, strings.Join(newTitles, "\n")))
-			}
-			if len(resolvedTitles) > 0 {
-				parts = append(parts, fmt.Sprintf("✅ Auto-closed from %s:\n%s", chatName, strings.Join(resolvedTitles, "\n")))
-			}
-			if len(parts) > 0 {
-				e.notifier.Notify(strings.Join(parts, "\n\n"))
 			}
 		}
 
