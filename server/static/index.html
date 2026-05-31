@@ -2689,7 +2689,7 @@
                             <div class="group-avatar"${avatarStyle}>${getInitials(group.name)}</div>
                             <span class="group-name">${esc(group.name)}</span>
                             <button class="favorite-btn group-fav-btn ${chatStarClass}" onclick="event.stopPropagation();toggleChatFavorite('${escAttr(group.chat_jid)}','${escAttr(group.name)}',${group.is_group})"><svg viewBox="0 0 24 24" fill="${chatStarFill}" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
-                            <button class="mute-btn group-fav-btn ${muteClass}" onclick="event.stopPropagation();toggleChatMute('${escAttr(group.chat_jid)}','${escAttr(group.name)}')" title="${chatMuted ? 'Resume' : 'Pause'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg></button>
+                            <button class="mute-btn group-fav-btn ${muteClass}" onclick="event.stopPropagation();toggleChatMute('${escAttr(group.chat_jid)}','${escAttr(group.name)}')" title="${chatMuted ? 'Resume' : 'Pause'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="8" y1="5" x2="8" y2="19"/><line x1="16" y1="5" x2="16" y2="19"/></svg></button>
                             <span class="group-meta">${metaText}</span>
                         </div>
                         <div class="group-header-right">
