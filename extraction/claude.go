@@ -35,7 +35,7 @@ type claudeResponse struct {
 
 func callClaude(ctx context.Context, apiKey, prompt string) (string, error) {
 	reqBody := claudeRequest{
-		Model:     "claude-sonnet-4-20250514",
+		Model:     "claude-sonnet-4-6",
 		MaxTokens: 2048,
 		Messages: []claudeMessage{
 			{Role: "user", Content: prompt},

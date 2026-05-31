@@ -25,7 +25,7 @@ The message should be polite, casual, and natural — like something a real pers
 Return ONLY the message text, nothing else.`, c.PersonName, c.Title, c.Context, c.SourceQuote, c.SourceTime)
 
 	reqBody := map[string]any{
-		"model":      "claude-sonnet-4-20250514",
+		"model":      "claude-sonnet-4-6",
 		"max_tokens": 256,
 		"messages": []map[string]string{
 			{"role": "user", "content": prompt},
