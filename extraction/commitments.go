@@ -29,6 +29,7 @@ type Extractor struct {
 	lastErrorAt   time.Time
 	batchesRun    int
 	msgsProcessed int
+	lastNotifyAt  time.Time
 }
 
 type DebugStatus struct {
@@ -161,7 +162,15 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			log.Printf("extraction failed for %s: %v", chatJID, err)
 			extractionErr = err
 			if e.notifier != nil && strings.Contains(err.Error(), "429") {
-				e.notifier.Notify("⚠️ Commit: API rate limit hit. Extraction paused, will retry shortly.")
+				e.debugMu.RLock()
+				lastNotify := e.lastNotifyAt
+				e.debugMu.RUnlock()
+				if time.Since(lastNotify) > time.Hour {
+					e.notifier.Notify("⚠️ Commit: API rate limit hit. Extraction paused, will retry shortly.")
+					e.debugMu.Lock()
+					e.lastNotifyAt = time.Now()
+					e.debugMu.Unlock()
+				}
 			}
 			continue
 		}

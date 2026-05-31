@@ -2,7 +2,7 @@
 # build-windows.sh — Cross-compile Commit for Windows and package as .zip
 set -e
 
-VERSION="1.1.2"
+VERSION="1.2.0"
 APP_NAME="Commit"
 ZIP_NAME="Commit-${VERSION}-windows-amd64.zip"
 STAGING_DIR="/tmp/commit-windows-staging"

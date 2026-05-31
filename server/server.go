@@ -24,6 +24,8 @@ import (
 	waTypes "go.mau.fi/whatsmeow/types"
 )
 
+const AppVersion = "1.2.0"
+
 //go:embed static
 var staticFS embed.FS
 
@@ -70,7 +72,7 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:;")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://mitensampat.github.io;")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -107,6 +109,7 @@ func (s *Server) registerRoutes() {
 
 	// Public (no auth required)
 	s.mux.HandleFunc("/api/qr", s.handleQR)
+	s.mux.HandleFunc("/api/version", s.handleVersion)
 	s.mux.HandleFunc("/api/status", s.handleStatus)
 	s.mux.HandleFunc("/api/auth/check", s.handleAuthCheck)
 	s.mux.HandleFunc("/api/auth/login", s.requireJSON(s.handleAuthLogin))
@@ -272,6 +275,10 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	token := s.generateSession()
 	http.SetCookie(w, s.sessionCookie(token, r))
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{"version": AppVersion})
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {

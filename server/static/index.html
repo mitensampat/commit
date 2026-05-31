@@ -512,6 +512,35 @@
             color: var(--ink);
         }
 
+        .update-banner {
+            max-width: 852px;
+            margin: 12px auto 0;
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .update-banner a {
+            color: var(--text-primary);
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .update-banner a:hover { text-decoration: underline; }
+        .update-dismiss {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--text-tertiary);
+            font-size: 16px;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+
         /* Search */
         .search-bar-container {
             padding: 16px 0 0;
@@ -1823,6 +1852,12 @@
         </div>
 
         <div class="greeting" id="greeting"></div>
+
+        <div class="update-banner" id="update-banner" style="display:none;">
+            <span>A new version of Commit is available.</span>
+            <a href="https://mitensampat.github.io/commit/" target="_blank">Download update</a>
+            <button onclick="dismissUpdate()" class="update-dismiss">&times;</button>
+        </div>
 
         <div class="search-bar-container">
             <div class="search-bar">
@@ -3208,6 +3243,25 @@
                 loadDashboard();
             }
         }, 30000);
+
+        // ── Update check ──
+        async function checkForUpdate() {
+            try {
+                const local = await api('/api/version');
+                const resp = await fetch('https://mitensampat.github.io/commit/version.json', { cache: 'no-store' });
+                if (!resp.ok) return;
+                const remote = await resp.json();
+                if (remote.version && remote.version !== local.version && !sessionStorage.getItem('update-dismissed')) {
+                    document.getElementById('update-banner').style.display = 'flex';
+                }
+            } catch {}
+        }
+        function dismissUpdate() {
+            document.getElementById('update-banner').style.display = 'none';
+            sessionStorage.setItem('update-dismissed', '1');
+        }
+        checkForUpdate();
+        setInterval(checkForUpdate, 3600000); // check hourly
 
         // ── Multi-tab sync ──
         const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('commit-sync') : null;
