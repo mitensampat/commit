@@ -344,7 +344,7 @@ func (s *Server) handleValidateKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req, _ := http.NewRequestWithContext(r.Context(), "POST", "https://api.anthropic.com/v1/messages",
-		bytes.NewReader([]byte(`{"model":"claude-sonnet-4-20250514","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`)))
+		bytes.NewReader([]byte(`{"model":"claude-sonnet-4-6","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", body.APIKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
