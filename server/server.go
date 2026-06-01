@@ -399,15 +399,19 @@ func (s *Server) validateKeyWithModel(ctx context.Context, apiKey, model string)
 		respBody, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
+		// 401 = bad key, definitely invalid
 		if resp.StatusCode == 401 {
 			return false, ""
 		}
+		// 404 with not_found_error = model doesn't exist, try next
 		if resp.StatusCode == 404 && strings.Contains(string(respBody), "not_found_error") {
 			continue
 		}
+		// Anything else (200, 400, 429, 529) = key is valid, model works
 		return true, m
 	}
-	return false, ""
+	// All models returned 404 — key might still be valid, accept with fallback
+	return true, store.FallbackModel
 }
 
 func (s *Server) handleModel(w http.ResponseWriter, r *http.Request) {
