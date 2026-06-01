@@ -304,6 +304,22 @@ func (db *DB) SetModel(model string) error {
 	return db.SetSetting("claude_model", model)
 }
 
+// Track tasks — when enabled, extraction also captures direct, unanswered
+// tasks/requests (imperatives) as commitments, not just explicit promises.
+// Off by default to preserve the strict, low-false-positive behavior.
+
+func (db *DB) GetTrackTasks() bool {
+	return db.GetSetting("track_tasks") == "1"
+}
+
+func (db *DB) SetTrackTasks(on bool) error {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	return db.SetSetting("track_tasks", v)
+}
+
 // API Key (encrypted at rest)
 
 func (db *DB) GetAPIKey() string {

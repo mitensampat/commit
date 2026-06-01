@@ -139,6 +139,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/user-name", s.requireAuth(s.handleUserName))
 	s.mux.HandleFunc("/api/setup/validate", s.requireAuth(s.handleValidateKey))
 	s.mux.HandleFunc("/api/model", s.requireAuth(s.handleModel))
+	s.mux.HandleFunc("/api/track-tasks", s.requireAuth(s.handleTrackTasks))
 	s.mux.HandleFunc("/api/setup/update-key", s.requireAuth(s.handleUpdateKey))
 	s.mux.HandleFunc("/api/debug", s.requireAuth(s.handleDebug))
 	s.mux.HandleFunc("/api/logout", s.requireAuth(s.handleLogout))
@@ -435,6 +436,29 @@ func (s *Server) handleModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "model": body.Model})
+}
+
+func (s *Server) handleTrackTasks(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		writeJSON(w, map[string]bool{"track_tasks": s.db.GetTrackTasks()})
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		TrackTasks bool `json:"track_tasks"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	if err := s.db.SetTrackTasks(body.TrackTasks); err != nil {
+		http.Error(w, "failed to save", 500)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "track_tasks": body.TrackTasks})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {

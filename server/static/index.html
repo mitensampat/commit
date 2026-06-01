@@ -1462,6 +1462,37 @@
             font-family: monospace;
         }
 
+        .toggle {
+            position: relative;
+            display: inline-block;
+            width: 38px;
+            height: 22px;
+            flex-shrink: 0;
+        }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            cursor: pointer;
+            background: var(--line);
+            border-radius: 999px;
+            transition: background 0.2s ease;
+        }
+        .toggle-slider::before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            top: 2px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+            transition: transform 0.2s ease;
+        }
+        .toggle input:checked + .toggle-slider { background: var(--accent); }
+        .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
+
         /* Responsive */
         @media (max-width: 640px) {
             .topbar { padding: 10px 16px; }
@@ -1928,6 +1959,19 @@
                         <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
                         <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (fast/cheap)</option>
                     </select>
+                </div>
+            </div>
+            <div class="settings-group">
+                <div class="settings-group-title">Extraction</div>
+                <div class="settings-row">
+                    <span class="settings-row-label" style="display: flex; flex-direction: column; gap: 2px; padding-right: 12px;">
+                        Track unanswered tasks
+                        <span style="font-size: 11px; color: var(--ink-tertiary); font-weight: 400;">Also capture tasks someone asks you to do, even before you agree to them — not just explicit promises. Catches more, with more false positives.</span>
+                    </span>
+                    <label class="toggle">
+                        <input type="checkbox" id="settings-track-tasks" onchange="updateTrackTasks()" />
+                        <span class="toggle-slider"></span>
+                    </label>
                 </div>
             </div>
             <div class="settings-group">
@@ -3143,6 +3187,7 @@
             }
             loadDebugInfo();
             loadModelSetting();
+            loadTrackTasksSetting();
         }
         function closeSettings() { document.getElementById('settings-overlay').classList.remove('active'); }
 
@@ -3160,6 +3205,24 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({model: sel.value})
+                });
+            } catch {}
+        }
+
+        async function loadTrackTasksSetting() {
+            try {
+                const d = await api('/api/track-tasks');
+                const cb = document.getElementById('settings-track-tasks');
+                if (cb) cb.checked = !!d.track_tasks;
+            } catch {}
+        }
+        async function updateTrackTasks() {
+            const cb = document.getElementById('settings-track-tasks');
+            try {
+                await api('/api/track-tasks', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({track_tasks: cb.checked})
                 });
             } catch {}
         }

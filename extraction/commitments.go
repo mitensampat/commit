@@ -232,7 +232,7 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 }
 
 func (e *Extractor) extractFromChat(ctx context.Context, apiKey string, msgs []*store.Message, openCommitments []*store.Commitment) (*extractionResult, error) {
-	prompt := buildExtractionPrompt(msgs, openCommitments)
+	prompt := buildExtractionPrompt(msgs, openCommitments, e.db.GetTrackTasks())
 	model := e.db.GetModel()
 	response, err := callClaude(ctx, apiKey, model, prompt)
 	if err != nil {
@@ -256,20 +256,48 @@ func (e *Extractor) extractFromChat(ctx context.Context, apiKey string, msgs []*
 	return &result, nil
 }
 
-func buildExtractionPrompt(msgs []*store.Message, openCommitments []*store.Commitment) string {
+func buildExtractionPrompt(msgs []*store.Message, openCommitments []*store.Commitment, trackTasks bool) string {
 	var sb strings.Builder
 	sb.WriteString(`Analyze these WhatsApp messages. Do two things:
 
-1. EXTRACT NEW COMMITMENTS — promises, obligations, or things someone said they would do.
+1. EXTRACT NEW COMMITMENTS — `)
+	if trackTasks {
+		sb.WriteString("promises, obligations, and direct tasks someone is expected to do.")
+	} else {
+		sb.WriteString("promises, obligations, or things someone said they would do.")
+	}
+	sb.WriteString(`
 For each new commitment, return:
 - title: short description of the commitment
 - context: one sentence explaining the situation
-- direction: "you_owe" if the user (messages marked [ME]) made the promise, "they_owe" if someone else did
+- direction: `)
+	if trackTasks {
+		sb.WriteString(`"you_owe" if the user (messages marked [ME]) made the promise OR was directly asked/told to do something; "they_owe" if someone else promised the user or the user asked them to do something`)
+	} else {
+		sb.WriteString(`"you_owe" if the user (messages marked [ME]) made the promise, "they_owe" if someone else did`)
+	}
+	sb.WriteString(`
 - source_quote: the exact message text that contains the commitment
 - due_hint: any mentioned deadline or timeframe, converted to a concrete date/time if possible (e.g. "tomorrow" → "May 30", "by EOD" → "today evening"). Empty string if none
 - person_name: the name of the other person involved
 
-IMPORTANT — only extract REAL commitments. A commitment is someone explicitly stating they WILL do something, or agreeing to a request. Do NOT extract:
+`)
+	if trackTasks {
+		sb.WriteString(`Two kinds of commitment count:
+A) A PROMISE — someone explicitly states they WILL do something, or agrees to a request.
+B) A DIRECT TASK — someone asks or tells another person to do a specific, actionable thing, addressed directly to them. This includes imperative requests in any language (e.g. "send me the file", "call them tomorrow", "kal bhej dena", "reply kar dena", "remind me", "book the tickets"). Capture these EVEN IF the recipient has not yet replied with agreement — the request itself creates something to track. A task someone asks the user to do is "you_owe"; a task the user asks someone else to do is "they_owe".
+
+Do NOT extract:
+- Pure questions seeking information ("what time is it?", "did you eat?") with no action requested
+- Offers or suggestions ("I could...", "maybe we should...") — only extract if they clearly commit to or assign an action
+- Greetings, small talk, reactions, or emotional messages
+- Status updates or announcements that don't involve a task or a promise to act
+- Rhetorical statements or vague intentions ("we should catch up sometime", "let's hang out soon") — these have no specific actionable task
+- Messages in any language follow the same rules — translate mentally but apply the same standard
+
+The bar for a DIRECT TASK is that it names a specific, actionable thing addressed to a particular person. When a request is that concrete, extract it. When it is vague, social, or merely informational, do not.`)
+	} else {
+		sb.WriteString(`IMPORTANT — only extract REAL commitments. A commitment is someone explicitly stating they WILL do something, or agreeing to a request. Do NOT extract:
 - Questions ("can you...?", "would you mind...?") — these are requests, not commitments, unless answered with agreement
 - Offers or suggestions ("I could...", "maybe we should...") — only extract if they clearly commit to action
 - Greetings, small talk, reactions, or emotional messages
@@ -277,7 +305,9 @@ IMPORTANT — only extract REAL commitments. A commitment is someone explicitly 
 - Rhetorical statements or vague intentions ("we should catch up sometime")
 - Messages in any language follow the same rules — translate mentally but apply the same strict standard
 
-When in doubt, do NOT extract. False positives are worse than missed commitments.
+When in doubt, do NOT extract. False positives are worse than missed commitments.`)
+	}
+	sb.WriteString(`
 
 2. AUTO-RESOLVE — this is critical. Carefully check if ANY of the existing open commitments below have been fulfilled, completed, or made irrelevant by the new messages. Be aggressive about detecting resolution. Mark a commitment as resolved if:
 - The promised action was done (sent a doc, made a call, shared info, etc.)
