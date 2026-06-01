@@ -8,15 +8,16 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
 const claudeAPIURL = "https://api.anthropic.com/v1/messages"
 
 type claudeRequest struct {
-	Model     string           `json:"model"`
-	MaxTokens int              `json:"max_tokens"`
-	Messages  []claudeMessage  `json:"messages"`
+	Model     string          `json:"model"`
+	MaxTokens int             `json:"max_tokens"`
+	Messages  []claudeMessage `json:"messages"`
 }
 
 type claudeMessage struct {
@@ -29,13 +30,14 @@ type claudeResponse struct {
 		Text string `json:"text"`
 	} `json:"content"`
 	Error *struct {
+		Type    string `json:"type"`
 		Message string `json:"message"`
 	} `json:"error"`
 }
 
-func callClaude(ctx context.Context, apiKey, prompt string) (string, error) {
+func callClaude(ctx context.Context, apiKey, model, prompt string) (string, error) {
 	reqBody := claudeRequest{
-		Model:     "claude-sonnet-4-20250514",
+		Model:     model,
 		MaxTokens: 2048,
 		Messages: []claudeMessage{
 			{Role: "user", Content: prompt},
@@ -75,6 +77,12 @@ func callClaude(ctx context.Context, apiKey, prompt string) (string, error) {
 		}
 		return "", fmt.Errorf("rate limited, retry after %v", wait)
 	}
+
+	// Model not found — signal caller to fall back
+	if resp.StatusCode == 404 && strings.Contains(string(respBody), "not_found_error") {
+		return "", &ModelNotFoundError{Model: model}
+	}
+
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("api error %d: %s", resp.StatusCode, string(respBody))
 	}
@@ -93,4 +101,13 @@ func callClaude(ctx context.Context, apiKey, prompt string) (string, error) {
 	}
 
 	return result.Content[0].Text, nil
+}
+
+// ModelNotFoundError signals that the requested model doesn't exist for this API key.
+type ModelNotFoundError struct {
+	Model string
+}
+
+func (e *ModelNotFoundError) Error() string {
+	return fmt.Sprintf("model not found: %s", e.Model)
 }

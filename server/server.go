@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,6 +138,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/local-ip", s.requireAuth(s.handleLocalIP))
 	s.mux.HandleFunc("/api/user-name", s.requireAuth(s.handleUserName))
 	s.mux.HandleFunc("/api/setup/validate", s.requireAuth(s.handleValidateKey))
+	s.mux.HandleFunc("/api/model", s.requireAuth(s.handleModel))
 	s.mux.HandleFunc("/api/setup/update-key", s.requireAuth(s.handleUpdateKey))
 	s.mux.HandleFunc("/api/debug", s.requireAuth(s.handleDebug))
 	s.mux.HandleFunc("/api/logout", s.requireAuth(s.handleLogout))
@@ -343,25 +345,16 @@ func (s *Server) handleValidateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, _ := http.NewRequestWithContext(r.Context(), "POST", "https://api.anthropic.com/v1/messages",
-		bytes.NewReader([]byte(`{"model":"claude-sonnet-4-20250514","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`)))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", body.APIKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		writeJSON(w, map[string]any{"valid": false, "error": "could not reach API"})
-		return
-	}
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
-
-	if resp.StatusCode == 401 {
+	model := s.db.GetModel()
+	valid, detectedModel := s.validateKeyWithModel(r.Context(), body.APIKey, model)
+	if !valid {
 		writeJSON(w, map[string]any{"valid": false, "error": "invalid API key"})
 		return
 	}
-	writeJSON(w, map[string]any{"valid": true})
+	if detectedModel != model {
+		s.db.SetModel(detectedModel)
+	}
+	writeJSON(w, map[string]any{"valid": true, "model": detectedModel})
 }
 
 func (s *Server) handleUpdateKey(w http.ResponseWriter, r *http.Request) {
@@ -385,6 +378,59 @@ func (s *Server) handleUpdateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) validateKeyWithModel(ctx context.Context, apiKey, model string) (bool, string) {
+	models := []string{model}
+	if model != store.FallbackModel {
+		models = append(models, store.FallbackModel)
+	}
+	for _, m := range models {
+		req, _ := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages",
+			bytes.NewReader([]byte(fmt.Sprintf(`{"model":"%s","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`, m))))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-api-key", apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			continue
+		}
+		respBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode == 401 {
+			return false, ""
+		}
+		if resp.StatusCode == 404 && strings.Contains(string(respBody), "not_found_error") {
+			continue
+		}
+		return true, m
+	}
+	return false, ""
+}
+
+func (s *Server) handleModel(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		writeJSON(w, map[string]string{"model": s.db.GetModel()})
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		Model string `json:"model"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Model == "" {
+		http.Error(w, "model required", 400)
+		return
+	}
+	if err := s.db.SetModel(body.Model); err != nil {
+		http.Error(w, "failed to save", 500)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "model": body.Model})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -812,7 +858,7 @@ func (s *Server) handleNudge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, err := generateNudgeMessage(r.Context(), apiKey, target)
+	msg, err := s.callNudgeWithFallback(r.Context(), apiKey, target)
 	if err != nil {
 		log.Printf("nudge draft error: %v", err)
 		http.Error(w, "failed to generate nudge", 500)

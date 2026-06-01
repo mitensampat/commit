@@ -287,6 +287,23 @@ func (db *DB) decrypt(stored string) (string, error) {
 	return string(plaintext), nil
 }
 
+// Model
+
+const DefaultModel = "claude-sonnet-4-20250514"
+const FallbackModel = "claude-3-5-sonnet-20241022"
+
+func (db *DB) GetModel() string {
+	m := db.GetSetting("claude_model")
+	if m == "" {
+		return DefaultModel
+	}
+	return m
+}
+
+func (db *DB) SetModel(model string) error {
+	return db.SetSetting("claude_model", model)
+}
+
 // API Key (encrypted at rest)
 
 func (db *DB) GetAPIKey() string {

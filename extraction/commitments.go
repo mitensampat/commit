@@ -233,9 +233,18 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 
 func (e *Extractor) extractFromChat(ctx context.Context, apiKey string, msgs []*store.Message, openCommitments []*store.Commitment) (*extractionResult, error) {
 	prompt := buildExtractionPrompt(msgs, openCommitments)
-	response, err := callClaude(ctx, apiKey, prompt)
+	model := e.db.GetModel()
+	response, err := callClaude(ctx, apiKey, model, prompt)
 	if err != nil {
-		return nil, err
+		// Auto-fallback: if model not found, try fallback and save it
+		if _, ok := err.(*ModelNotFoundError); ok && model != store.FallbackModel {
+			log.Printf("model %s not available, falling back to %s", model, store.FallbackModel)
+			e.db.SetModel(store.FallbackModel)
+			response, err = callClaude(ctx, apiKey, store.FallbackModel, prompt)
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var result extractionResult

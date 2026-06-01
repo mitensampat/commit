@@ -1920,6 +1920,17 @@
                 </div>
             </div>
             <div class="settings-group">
+                <div class="settings-group-title">Model</div>
+                <div class="settings-row">
+                    <span class="settings-row-label">Claude model</span>
+                    <select id="settings-model" onchange="updateModel()" style="font-size: 13px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-sunken); color: var(--ink); font-family: inherit; cursor: pointer;">
+                        <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (latest)</option>
+                        <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                        <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (fast/cheap)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="settings-group">
                 <div class="settings-group-title">API Key</div>
                 <div class="settings-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
                     <span class="settings-row-label">Update your Anthropic API key</span>
@@ -3131,8 +3142,27 @@
                 }
             }
             loadDebugInfo();
+            loadModelSetting();
         }
         function closeSettings() { document.getElementById('settings-overlay').classList.remove('active'); }
+
+        async function loadModelSetting() {
+            try {
+                const d = await api('/api/model');
+                const sel = document.getElementById('settings-model');
+                if (sel && d.model) sel.value = d.model;
+            } catch {}
+        }
+        async function updateModel() {
+            const sel = document.getElementById('settings-model');
+            try {
+                await api('/api/model', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({model: sel.value})
+                });
+            } catch {}
+        }
 
         async function loadDebugInfo() {
             const panel = document.getElementById('debug-panel');
