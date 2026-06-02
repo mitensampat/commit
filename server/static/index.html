@@ -2702,7 +2702,7 @@
                     if (resolvedCount > 0) parts.push(resolvedCount + ' closed');
                     metaText += parts.join(', ');
                 } else {
-                    metaText += filtered.length + ' open';
+                    metaText += filtered.length + (currentTab === 'resolved' ? ' closed' : ' open');
                 }
 
                 html += `<div class="commitment-group" data-person="${escAttr(group.name.toLowerCase())}">
