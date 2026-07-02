@@ -271,7 +271,7 @@
 <div class="header">
   <div class="header-left">
     <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C12.4 5.5 14 8 16.5 10C19 11.5 22 11.8 22 12C22 12.2 19 12.5 16.5 14C14 16 12.4 18.5 12 22C11.6 18.5 10 16 7.5 14C5 12.5 2 12.2 2 12C2 11.8 5 11.5 7.5 10C10 8 11.6 5.5 12 2Z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
-    Commit <span class="version">v1.1.2</span>
+    Commit <span class="version">v1.3.0</span>
   </div>
   <div class="clock" id="clock"></div>
 </div>
@@ -290,11 +290,13 @@
 <p><b>features</b></p>
 <ol>
 <li>auto-extraction and auto-resolution of commitments</li>
-<li>follow-up nudges for things that have gone quiet</li>
-<li>reminders via WhatsApp message to yourself</li>
+<li>"needs your attention" &mdash; surfaces what's about to drop, who's gone quiet, and what's dying in the dark</li>
+<li>nudge messages in three tones &mdash; gentle, direct, or firm</li>
 <li>reply to any chat from the dashboard</li>
-<li>WhatsApp bot commands (message yourself: "commitments", "owe @name", "done &lt;text&gt;")</li>
-<li>favorites, search, dark mode, mobile web</li>
+<li>type <code>@commit</code> in any WhatsApp chat to see open commitments</li>
+<li>bot commands (message yourself: "commitments", "owe @name", "done &lt;text&gt;")</li>
+<li>rename contacts whose WhatsApp names don't match your phonebook</li>
+<li>favorites, search, reminders, dark mode, mobile web</li>
 <li>passcode protection, AES-GCM encrypted API key</li>
 </ol>
 </div>
@@ -310,13 +312,9 @@
 <p>macOS 12+ or Windows 10+. a WhatsApp account. a <a href="https://console.anthropic.com/">Claude API key</a>.</p>
 </div>
 
-<p id="access-prompt">Commit is ready for you. <span class="link" onclick="document.getElementById('access-prompt').style.display='none';document.getElementById('access').style.display='block';">request access</span> · <a href="#screens" class="link">see it in action</a></p>
+<p><a href="https://github.com/mitensampat/commit/releases/latest" style="font-weight: 600;">download the latest release</a> · <a href="#screens" class="link">see it in action</a></p>
 
-<div id="access" class="reveal">
-<p>email <span class="email">coach.alfred.ai@gmail.com</span> with subject line "Commit app" and describe what you intend to use this for. I'll send you the installable in around 24 hours.</p>
-</div>
-
-<p class="quiet" style="margin-top: 24px;">brought to you by <a href="https://x.com/miten">MS Foundry</a> &middot; updated 31 May 2026</p>
+<p class="quiet" style="margin-top: 24px;">brought to you by <a href="https://x.com/miten">MS Foundry</a> &middot; updated 30 Jun 2026</p>
 
 <div class="screens" id="screens">
 <hr>
