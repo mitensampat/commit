@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,6 +31,7 @@ type Commitment struct {
 	ReminderAt   *time.Time `json:"reminder_at,omitempty"`
 	LastNudgedAt *time.Time `json:"last_nudged_at,omitempty"`
 	LastInbound  *time.Time `json:"last_inbound,omitempty"`
+	Significance string    `json:"significance"`
 }
 
 type CommitmentGroup struct {
@@ -56,15 +58,18 @@ func (db *DB) SaveCommitment(c *Commitment) error {
 	if c.ResolvedBy == "" {
 		c.ResolvedBy = "user"
 	}
+	if c.Significance == "" {
+		c.Significance = "medium"
+	}
 	_, err := db.conn.Exec(`
 		INSERT OR IGNORE INTO commitments
 			(id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
-			 source_quote, source_time, message_id, status, due_hint, created_at, is_group, favorited, resolved_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 source_quote, source_time, message_id, status, due_hint, created_at, is_group, favorited, resolved_by, significance)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.ID, c.ChatJID, c.ChatName, c.PersonName, c.PersonJID,
 		c.Title, c.Context, c.Direction, c.SourceQuote, c.SourceTime,
 		c.MessageID, c.Status, c.DueHint, c.CreatedAt.Unix(), boolToInt(c.IsGroup), boolToInt(c.Favorited),
-		c.ResolvedBy,
+		c.ResolvedBy, c.Significance,
 	)
 	return err
 }
@@ -72,7 +77,7 @@ func (db *DB) SaveCommitment(c *Commitment) error {
 func (db *DB) GetCommitments(status string) ([]*Commitment, error) {
 	oneDayFromNow := time.Now().Add(24 * time.Hour).Unix()
 	query := `SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
-		source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at
+		source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
 		FROM commitments`
 	args := []any{}
 
@@ -165,14 +170,26 @@ func (db *DB) updateCommitmentStatus(id, status, resolvedBy string) error {
 }
 
 func (db *DB) SearchCommitments(query string) ([]*Commitment, error) {
-	pattern := "%" + query + "%"
+	keywords := strings.Fields(strings.ToLower(query))
+	if len(keywords) == 0 {
+		return nil, nil
+	}
+
+	var conditions []string
+	var args []interface{}
+	for _, kw := range keywords {
+		pattern := "%" + kw + "%"
+		conditions = append(conditions, "(title LIKE ? OR context LIKE ? OR person_name LIKE ? OR source_quote LIKE ? OR chat_name LIKE ?)")
+		args = append(args, pattern, pattern, pattern, pattern, pattern)
+	}
+
 	rows, err := db.conn.Query(`
 		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
-			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
 		FROM commitments
-		WHERE (title LIKE ? OR context LIKE ? OR person_name LIKE ? OR source_quote LIKE ? OR chat_name LIKE ?)
+		WHERE `+strings.Join(conditions, " OR ")+`
 		ORDER BY CASE WHEN status = 'open' THEN 0 ELSE 1 END, favorited DESC, created_at DESC`,
-		pattern, pattern, pattern, pattern, pattern,
+		args...,
 	)
 	if err != nil {
 		return nil, err
@@ -191,7 +208,7 @@ func scanCommitments(rows *sql.Rows) ([]*Commitment, error) {
 		var isGroup, favorited int
 		if err := rows.Scan(&c.ID, &c.ChatJID, &c.ChatName, &c.PersonName, &c.PersonJID,
 			&c.Title, &c.Context, &c.Direction, &c.SourceQuote, &c.SourceTime,
-			&c.MessageID, &c.Status, &c.DueHint, &createdAt, &resolvedAt, &isGroup, &favorited, &c.ResolvedBy, &reminderAt, &lastNudgedAt); err != nil {
+			&c.MessageID, &c.Status, &c.DueHint, &createdAt, &resolvedAt, &isGroup, &favorited, &c.ResolvedBy, &reminderAt, &lastNudgedAt, &c.Significance); err != nil {
 			return nil, err
 		}
 		c.CreatedAt = time.Unix(createdAt, 0)
@@ -212,6 +229,9 @@ func scanCommitments(rows *sql.Rows) ([]*Commitment, error) {
 		if c.ResolvedBy == "" {
 			c.ResolvedBy = "user"
 		}
+		if c.Significance == "" {
+			c.Significance = "medium"
+		}
 		commitments = append(commitments, c)
 	}
 	return commitments, rows.Err()
@@ -227,10 +247,26 @@ func (db *DB) ToggleFavorite(id string) (bool, error) {
 	return fav == 1, nil
 }
 
+func (db *DB) GetCommitmentByID(id string) (*Commitment, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
+		FROM commitments WHERE id = ? LIMIT 1`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	cs, err := scanCommitments(rows)
+	if err != nil || len(cs) == 0 {
+		return nil, err
+	}
+	return cs[0], nil
+}
+
 func (db *DB) GetOpenCommitmentsForChat(chatJID string) ([]*Commitment, error) {
 	rows, err := db.conn.Query(`
 		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
-			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
 		FROM commitments
 		WHERE chat_jid = ? AND status = 'open'
 		ORDER BY created_at DESC`,
@@ -298,7 +334,7 @@ func (db *DB) GetFavoritesView() (*FavoritesView, error) {
 
 	rows, err := db.conn.Query(`
 		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
-			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
 		FROM commitments
 		WHERE (favorited = 1 OR chat_jid IN (SELECT chat_jid FROM favorite_chats))
 			AND status = 'open'
@@ -314,7 +350,7 @@ func (db *DB) GetFavoritesView() (*FavoritesView, error) {
 
 	rows, err = db.conn.Query(`
 		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
-			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
 		FROM commitments
 		WHERE (favorited = 1 OR chat_jid IN (SELECT chat_jid FROM favorite_chats))
 			AND status IN ('resolved', 'dismissed')
@@ -565,7 +601,7 @@ func (db *DB) GetFollowUps() ([]*Commitment, error) {
 
 	rows, err := db.conn.Query(`
 		SELECT c.id, c.chat_jid, c.chat_name, c.person_name, c.person_jid, c.title, c.context, c.direction,
-			c.source_quote, c.source_time, c.message_id, c.status, c.due_hint, c.created_at, c.resolved_at, c.is_group, c.favorited, c.resolved_by, c.reminder_at, c.last_nudged_at
+			c.source_quote, c.source_time, c.message_id, c.status, c.due_hint, c.created_at, c.resolved_at, c.is_group, c.favorited, c.resolved_by, c.reminder_at, c.last_nudged_at, c.significance
 		FROM commitments c
 		LEFT JOIN (
 			SELECT chat_jid, MAX(timestamp) AS last_inbound
@@ -618,7 +654,7 @@ func (db *DB) GetRecentlyAutoResolved() ([]*Commitment, error) {
 	oneDayAgo := time.Now().Add(-24 * time.Hour).Unix()
 	rows, err := db.conn.Query(`
 		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
-			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
 		FROM commitments
 		WHERE status = 'resolved' AND resolved_by = 'auto' AND resolved_at > ?
 		ORDER BY resolved_at DESC
@@ -628,6 +664,66 @@ func (db *DB) GetRecentlyAutoResolved() ([]*Commitment, error) {
 	}
 	defer rows.Close()
 	return scanCommitments(rows)
+}
+
+func (db *DB) GetStaleAutoCloseCandidates() ([]*Commitment, error) {
+	now := time.Now().Unix()
+	fourteenDaysAgo := now - 14*86400
+	thirtyDaysAgo := now - 30*86400
+
+	rows, err := db.conn.Query(`
+		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
+		FROM commitments
+		WHERE status = 'open' AND favorited = 0 AND (
+			(significance = 'low' AND created_at < ?) OR
+			(created_at < ? AND chat_jid NOT IN (
+				SELECT DISTINCT chat_jid FROM messages WHERE timestamp > ?
+			))
+		)
+		ORDER BY created_at ASC`,
+		fourteenDaysAgo, thirtyDaysAgo, fourteenDaysAgo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanCommitments(rows)
+}
+
+func (db *DB) GetExpiredDeadlineCommitments() ([]*Commitment, error) {
+	threeDaysAgo := time.Now().Unix() - 7*86400
+
+	rows, err := db.conn.Query(`
+		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
+		FROM commitments
+		WHERE status = 'open' AND favorited = 0 AND due_hint != '' AND created_at < ?
+		ORDER BY created_at ASC`,
+		threeDaysAgo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanCommitments(rows)
+}
+
+func (db *DB) GetChatsWithOpenCommitments() ([]string, error) {
+	rows, err := db.conn.Query("SELECT DISTINCT chat_jid FROM commitments WHERE status = 'open'")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var jids []string
+	for rows.Next() {
+		var jid string
+		if err := rows.Scan(&jid); err != nil {
+			return nil, err
+		}
+		jids = append(jids, jid)
+	}
+	return jids, rows.Err()
 }
 
 func (db *DB) RecordNudge(id string) error {
@@ -688,7 +784,7 @@ func (db *DB) GetDueReminders() ([]*Commitment, error) {
 	now := time.Now().Unix()
 	rows, err := db.conn.Query(`
 		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
-			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
 		FROM commitments
 		WHERE status = 'open' AND reminder_at IS NOT NULL AND reminder_at <= ?
 		ORDER BY reminder_at ASC`, now)
@@ -703,7 +799,7 @@ func (db *DB) GetStaleCommitments(daysOld int) ([]*Commitment, error) {
 	cutoff := time.Now().Add(-time.Duration(daysOld) * 24 * time.Hour).Unix()
 	rows, err := db.conn.Query(`
 		SELECT id, chat_jid, chat_name, person_name, person_jid, title, context, direction,
-			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at
+			source_quote, source_time, message_id, status, due_hint, created_at, resolved_at, is_group, favorited, resolved_by, reminder_at, last_nudged_at, significance
 		FROM commitments
 		WHERE status = 'open' AND favorited = 0 AND created_at < ?
 		ORDER BY created_at ASC

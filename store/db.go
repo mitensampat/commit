@@ -128,7 +128,11 @@ func (db *DB) migrate() error {
 		db.conn.Exec("CREATE INDEX IF NOT EXISTS idx_commitments_open_direction ON commitments(status, direction, created_at) WHERE status = 'open'")
 	}
 
-	db.setSchemaVersion(4)
+	if version < 5 {
+		db.conn.Exec("ALTER TABLE commitments ADD COLUMN significance TEXT NOT NULL DEFAULT 'medium'")
+	}
+
+	db.setSchemaVersion(5)
 	return nil
 }
 

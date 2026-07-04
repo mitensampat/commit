@@ -48,7 +48,19 @@ func main() {
 	defer cancel()
 
 	extractor := extraction.New(db, nil)
+
+	if len(os.Args) > 1 && os.Args[1] == "sweep" {
+		fmt.Println("Running resolution sweep...")
+		extractor.RunStalenessCheck()
+		if err := extractor.RunResolutionSweep(ctx); err != nil {
+			log.Fatalf("sweep error: %v", err)
+		}
+		fmt.Println("Done.")
+		return
+	}
+
 	wa := whatsapp.New(db, dataDir, extractor, ctx)
+	wa.SetFindHandler(extractor)
 	extractor.SetNotifier(wa)
 	srv := server.New(db, wa, extractor, defaultPort)
 

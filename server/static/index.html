@@ -560,6 +560,26 @@
             transition: border-color 0.15s;
         }
 
+        .search-hints {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 4px 0;
+            font-size: 12px;
+            color: var(--ink-faint);
+        }
+
+        .search-hint-cmd {
+            font-weight: 600;
+            color: var(--ink-tertiary);
+        }
+
+        .search-hint-sep {
+            width: 1px;
+            height: 12px;
+            background: var(--line);
+        }
+
         .search-bar:focus-within {
             border-color: var(--accent);
         }
@@ -592,6 +612,126 @@
             padding: 2px 6px;
             border-radius: 3px;
             border: 1px solid var(--line);
+        }
+
+        #find-container {
+            max-width: 852px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 12px 0 0;
+        }
+
+        .find-result {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-md);
+            padding: 18px;
+            position: relative;
+        }
+
+        .find-result .find-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--ink-faint);
+            margin-bottom: 12px;
+        }
+
+        .find-result .find-answer {
+            font-size: 14px;
+            line-height: 1.65;
+            color: var(--ink);
+        }
+        .find-result .find-answer p {
+            margin: 0 0 8px 0;
+        }
+        .find-result .find-answer p:last-child {
+            margin-bottom: 0;
+        }
+        .find-result .find-answer ol {
+            margin: 6px 0;
+            padding-left: 18px;
+        }
+        .find-result .find-answer ol li {
+            margin-bottom: 4px;
+            padding-left: 2px;
+        }
+
+        .find-result .find-sources {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid var(--line);
+        }
+
+        .find-result .find-source {
+            padding: 5px 0;
+            font-size: 12px;
+            color: var(--ink-faint);
+            line-height: 1.4;
+        }
+
+        .find-result .find-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: none;
+            border: none;
+            color: var(--ink-faint);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 2px 5px;
+            border-radius: 4px;
+            line-height: 1;
+        }
+        .find-result .find-close:hover {
+            color: var(--ink);
+        }
+
+        .find-loading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 18px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-md);
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: var(--ink-faint);
+        }
+
+        .find-loading .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--line);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .search-bar.find-mode {
+            border-color: var(--accent);
+        }
+
+        .search-bar .find-badge {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 12%, transparent);
+            padding: 2px 6px;
+            border-radius: 3px;
+            display: none;
+        }
+
+        .search-bar.find-mode .find-badge {
+            display: inline;
+        }
+
+        .search-bar.find-mode .search-shortcut {
+            display: none;
         }
 
         /* Tabs */
@@ -757,6 +897,27 @@
         .attn-reason.urgent { color: var(--danger); }
         .attn-reason.waiting { color: var(--warning); }
         .attn-reason.fading { color: var(--ink-faint); }
+
+        .sig-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 4px;
+            vertical-align: middle;
+            position: relative;
+            top: -1px;
+        }
+        .sig-dot.high { background: var(--danger); }
+        .sig-dot.medium { background: var(--ink-faint); }
+        .commitment-card.low-sig { opacity: 0.5; }
+        .low-count-note {
+            font-size: 12px;
+            color: var(--ink-faint);
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+        .low-count-note:hover { color: var(--ink-secondary); }
 
         .action-btn.primary-action {
             background: var(--ink);
@@ -1715,6 +1876,43 @@
             color: var(--growth);
         }
 
+        .context-area {
+            margin-top: 12px;
+            padding: 14px 16px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-md);
+        }
+        .context-area.hidden { display: none; }
+
+        .context-thread-msg {
+            padding: 3px 0;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--ink-secondary);
+        }
+        .context-thread-msg.is-source {
+            color: var(--ink);
+            font-weight: 500;
+        }
+        .context-thread-sender {
+            font-weight: 600;
+            color: var(--ink);
+            margin-right: 4px;
+        }
+        .context-thread-msg.is-source .context-thread-sender {
+            color: var(--accent);
+        }
+        .context-thread-time {
+            font-size: 11px;
+            color: var(--ink-faint);
+            margin-left: 4px;
+        }
+        .context-empty {
+            font-size: 13px;
+            color: var(--ink-faint);
+        }
+
         .commitment-meta {
             display: flex;
             align-items: center;
@@ -2277,10 +2475,18 @@
         <div class="search-bar-container">
             <div class="search-bar">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                <input type="text" id="search-input" placeholder="Search commitments, people, or groups..." oninput="handleSearch()" />
+                <span class="find-badge">AI</span>
+                <input type="text" id="search-input" placeholder="Search commitments, people, or groups..." oninput="handleSearch()" onkeydown="handleSearchKeydown(event)" />
                 <span class="search-shortcut">/</span>
             </div>
+            <div class="search-hints">
+                <span class="search-hint"><span class="search-hint-cmd">@find</span> Ask anything about your chats</span>
+                <span class="search-hint-sep"></span>
+                <span class="search-hint"><span class="search-hint-cmd">@commit</span> Show context in any chat</span>
+            </div>
         </div>
+
+        <div id="find-container"></div>
 
         <div class="tab-bar">
             <button class="tab active" onclick="switchTab('all', this)">All <span class="tab-count" id="count-all">0</span></button>
@@ -2297,7 +2503,7 @@
             <div class="content-inner" id="commitments-container"></div>
         </div>
 
-        <div class="footer">v1.3.0 by <a href="https://x.com/miten" target="_blank" style="color: inherit; text-decoration: none;">MS Foundry</a></div>
+        <div class="footer">v1.3.1 by <a href="https://x.com/miten" target="_blank" style="color: inherit; text-decoration: none;">MS Foundry</a></div>
     </div>
 
     <!-- ══════ Settings Overlay ══════ -->
@@ -2776,12 +2982,38 @@
             loadDashboard();
         }
 
+        async function toggleContext(id) {
+            const el = document.getElementById('context-' + id);
+            if (!el) return;
+            if (!el.classList.contains('hidden')) {
+                el.classList.add('hidden');
+                el.innerHTML = '';
+                return;
+            }
+            el.classList.remove('hidden');
+            el.innerHTML = '<div class="context-empty">Loading...</div>';
+            try {
+                const data = await api('/api/commitments/context?id=' + encodeURIComponent(id));
+                if (!data.messages || data.messages.length === 0) {
+                    el.innerHTML = '<div class="context-empty">No conversation context found for this item.</div>';
+                    return;
+                }
+                el.innerHTML = data.messages.map(m => {
+                    const cls = m.is_source ? ' is-source' : '';
+                    return `<div class="context-thread-msg${cls}"><span class="context-thread-sender">${esc(m.sender)}</span>${esc(m.content)}<span class="context-thread-time">${esc(m.timestamp)}</span></div>`;
+                }).join('');
+            } catch (e) {
+                el.innerHTML = '<div class="context-empty">Could not load context.</div>';
+            }
+        }
+
         function bucketAttentionItems(allOpen) {
             const now = Date.now();
             const DAY = 1000 * 60 * 60 * 24;
             const dropping = [], quiet = [], dying = [];
 
             for (const c of allOpen) {
+                if ((c.significance || 'medium') === 'low') continue;
                 const ageDays = (now - new Date(c.created_at).getTime()) / DAY;
                 const lastInbound = c.last_inbound ? new Date(c.last_inbound).getTime() : 0;
                 const inboundAgo = lastInbound ? (now - lastInbound) / DAY : Infinity;
@@ -3313,6 +3545,12 @@
 
         let renderedGroupCount = 0;
         let pendingGroups = [];
+        let showLowSignificance = false;
+
+        function toggleLowSignificance() {
+            showLowSignificance = !showLowSignificance;
+            loadDashboard();
+        }
 
         function renderGroupsHTML(groups) {
             renderedGroupCount = 0;
@@ -3329,6 +3567,10 @@
                 if (!isSearching) {
                     if (currentTab === 'you_owe') filtered = filtered.filter(c => c.direction === 'you_owe');
                     else if (currentTab === 'they_owe') filtered = filtered.filter(c => c.direction === 'they_owe');
+                }
+                const lowCount = filtered.filter(c => c.status === 'open' && (c.significance || 'medium') === 'low').length;
+                if (!showLowSignificance && !isSearching) {
+                    filtered = filtered.filter(c => c.status !== 'open' || (c.significance || 'medium') !== 'low');
                 }
                 if (filtered.length === 0) continue;
 
@@ -3388,10 +3630,14 @@
                     const bellSvg = `<svg viewBox="0 0 24 24" fill="${hasReminder ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
                     const reminderHtml = hasReminder ? `<span class="reminder-tag" data-reminder-id="${escAttr(c.id)}"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>${formatReminderTime(c.reminder_at)}</span>` : '';
 
-                    html += `<div class="${cardClass}" data-direction="${dirClass}" data-search="${escAttr(c.title)} ${escAttr(c.context)} ${escAttr(c.person_name)}" id="card-${escAttr(c.id)}">
+                    const sig = c.significance || 'medium';
+                    const sigDot = (!isResolved && sig !== 'low') ? `<span class="sig-dot ${sig}"></span>` : '';
+                    const lowClass = (!isResolved && sig === 'low') ? ' low-sig' : '';
+
+                    html += `<div class="${cardClass}${lowClass}" data-direction="${dirClass}" data-significance="${sig}" data-search="${escAttr(c.title)} ${escAttr(c.context)} ${escAttr(c.person_name)}" id="card-${escAttr(c.id)}">
                         <div class="commitment-top">
                             <div class="commitment-body">
-                                <div class="commitment-title"${titleStyle}>${esc(c.title)}</div>
+                                <div class="commitment-title"${titleStyle}>${sigDot}${esc(c.title)}</div>
                                 ${!isResolved && c.context ? `<div class="commitment-context">${esc(c.context)}</div>` : ''}
                                 ${!isResolved && c.source_quote ? `<div class="commitment-source">${chatSvg}<div class="source-text"><span class="source-quote">"${esc(c.source_quote)}"</span>${c.source_time ? `<span class="source-time">${esc(c.source_time)}</span>` : ''}</div></div>` : ''}
                                 <div class="commitment-meta">
@@ -3410,12 +3656,18 @@
                                 <button class="action-btn" onclick="showReply('${escAttr(c.id)}','${escAttr(c.chat_jid)}')">Reply</button>
                                 <button class="action-btn done" onclick="updateStatus('${escAttr(c.id)}','resolved')">Done</button>
                                 <button class="action-btn" onclick="updateStatus('${escAttr(c.id)}','dismissed')">Dismiss</button>
+                                <button class="action-btn" onclick="toggleContext('${escAttr(c.id)}')">Context</button>
                             </div>` : `<div class="commitment-actions" style="opacity:1;">
                                 <button class="action-btn" onclick="reopenCommitment('${escAttr(c.id)}')">Reopen</button>
+                                <button class="action-btn" onclick="toggleContext('${escAttr(c.id)}')">Context</button>
                             </div>`}
                         </div>
                         ${!isResolved ? `<div class="reply-area hidden" id="reply-${escAttr(c.id)}"></div>` : ''}
+                        <div class="context-area hidden" id="context-${escAttr(c.id)}"></div>
                     </div>`;
+                }
+                if (lowCount > 0 && !showLowSignificance && !isSearching) {
+                    html += `<div class="low-count-note" onclick="toggleLowSignificance()">${lowCount} low-priority item${lowCount > 1 ? 's' : ''} hidden</div>`;
                 }
                 html += '</div>';
                 rendered++;
@@ -3669,9 +3921,38 @@
 
         // ── Search ──
         let searchTimeout;
+        let findMode = false;
+
+        function handleSearchKeydown(e) {
+            const input = document.getElementById('search-input');
+            if (e.key === 'Enter' && findMode) {
+                e.preventDefault();
+                runFind(input.value.trim());
+            }
+            if (e.key === 'Escape' && findMode) {
+                exitFindMode();
+            }
+        }
+
         function handleSearch() {
             clearTimeout(searchTimeout);
-            const query = document.getElementById('search-input').value.trim();
+            const input = document.getElementById('search-input');
+            const query = input.value.trim();
+            const bar = input.closest('.search-bar');
+
+            if (query.toLowerCase().startsWith('@find ') || query.toLowerCase() === '@find') {
+                if (!findMode) {
+                    findMode = true;
+                    bar.classList.add('find-mode');
+                    input.placeholder = 'Ask anything about your chats... (Enter to search)';
+                }
+                return;
+            }
+
+            if (findMode && !query.toLowerCase().startsWith('@find')) {
+                exitFindMode();
+            }
+
             searchTimeout = setTimeout(async () => {
                 if (!query) {
                     isSearching = false;
@@ -3697,6 +3978,70 @@
                     console.error('search error:', e);
                 }
             }, 300);
+        }
+
+        function exitFindMode() {
+            findMode = false;
+            const input = document.getElementById('search-input');
+            const bar = input.closest('.search-bar');
+            bar.classList.remove('find-mode');
+            input.placeholder = 'Search commitments, people, or groups...';
+            document.getElementById('find-container').innerHTML = '';
+        }
+
+        async function runFind(raw) {
+            const query = raw.replace(/^@find\s*/i, '').trim();
+            if (!query) return;
+
+            const container = document.getElementById('find-container');
+            container.innerHTML = `<div class="find-loading"><div class="spinner"></div>Searching your conversations...</div>`;
+
+            try {
+                const result = await api('/api/find?q=' + encodeURIComponent(query));
+                let html = `<div class="find-result">
+                    <button class="find-close" onclick="closeFindResult()">&times;</button>
+                    <div class="find-label">Answer</div>
+                    <div class="find-answer">${formatFindAnswer(result.answer)}</div>`;
+
+                if (result.sources && result.sources.length > 0) {
+                    html += `<div class="find-sources">`;
+                    for (const s of result.sources.slice(0, 5)) {
+                        const parts = [s.date, s.chat || s.person, (s.content || '').substring(0, 80)].filter(Boolean).map(p => esc(p));
+                        html += `<div class="find-source">${parts.join(' · ')}</div>`;
+                    }
+                    html += `</div>`;
+                }
+
+                html += `</div>`;
+                container.innerHTML = html;
+            } catch (e) {
+                container.innerHTML = `<div class="find-result"><div class="find-answer">Search failed: ${esc(e.message || 'unknown error')}</div></div>`;
+            }
+        }
+
+        function formatFindAnswer(text) {
+            let s = esc(text);
+            // Convert (1) ... (2) ... or 1. ... 2. ... patterns into an ordered list
+            const numbered = s.match(/(?:^|\n)\s*(?:\(?\d+\)?[\.\):\-])\s+/g);
+            if (numbered && numbered.length >= 2) {
+                s = s.replace(/(?:^|\n)\s*(?:\(?\d+\)?[\.\):\-])\s+/g, '\n<<SPLIT>>');
+                const parts = s.split('<<SPLIT>>').filter(p => p.trim());
+                let intro = '';
+                let items = parts;
+                if (!text.trim().match(/^[\(\d]/)) {
+                    intro = parts[0];
+                    items = parts.slice(1);
+                }
+                let html = intro ? `<p>${intro.trim()}</p>` : '';
+                html += '<ol>' + items.map(i => `<li>${i.trim()}</li>`).join('') + '</ol>';
+                return html;
+            }
+            // Fall back to paragraph splitting
+            return s.split(/\n\n+/).map(p => `<p>${p.trim()}</p>`).join('');
+        }
+
+        function closeFindResult() {
+            document.getElementById('find-container').innerHTML = '';
         }
 
         // ── Theme ──

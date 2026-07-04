@@ -50,12 +50,13 @@ func (e *Extractor) SetNotifier(n Notifier) {
 }
 
 type extractedCommitment struct {
-	Title       string `json:"title"`
-	Context     string `json:"context"`
-	Direction   string `json:"direction"` // "you_owe" or "they_owe"
-	SourceQuote string `json:"source_quote"`
-	DueHint     string `json:"due_hint"`
-	PersonName  string `json:"person_name"`
+	Title        string `json:"title"`
+	Context      string `json:"context"`
+	Direction    string `json:"direction"` // "you_owe" or "they_owe"
+	SourceQuote  string `json:"source_quote"`
+	DueHint      string `json:"due_hint"`
+	PersonName   string `json:"person_name"`
+	Significance string `json:"significance"` // "high", "medium", "low"
 }
 
 type extractionResult struct {
@@ -176,17 +177,22 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 		}
 
 		for _, ec := range result.Commitments {
+			sig := ec.Significance
+			if sig != "high" && sig != "medium" && sig != "low" {
+				sig = "medium"
+			}
 			c := &store.Commitment{
-				ChatJID:     chatJID,
-				ChatName:    chatMsgs[0].ChatName,
-				PersonName:  ec.PersonName,
-				Title:       ec.Title,
-				Context:     ec.Context,
-				Direction:   ec.Direction,
-				SourceQuote: ec.SourceQuote,
-				DueHint:     ec.DueHint,
-				Status:      "open",
-				IsGroup:     chatMsgs[0].IsGroup,
+				ChatJID:      chatJID,
+				ChatName:     chatMsgs[0].ChatName,
+				PersonName:   ec.PersonName,
+				Title:        ec.Title,
+				Context:      ec.Context,
+				Direction:    ec.Direction,
+				SourceQuote:  ec.SourceQuote,
+				DueHint:      ec.DueHint,
+				Status:       "open",
+				IsGroup:      chatMsgs[0].IsGroup,
+				Significance: sig,
 			}
 			if ec.SourceQuote != "" {
 				for _, m := range chatMsgs {
@@ -262,36 +268,46 @@ func buildExtractionPrompt(msgs []*store.Message, openCommitments []*store.Commi
 	sb.WriteString(`Analyze these WhatsApp messages. Do two things:
 
 1. EXTRACT NEW COMMITMENTS — promises, obligations, or things someone said they would do.
+
+The user is a CEO. Only surface commitments that would matter to a sharp executive assistant — things that, if dropped, would damage a relationship, miss a deadline, lose money, or block someone important. Think: "Would this be embarrassing if forgotten?"
+
 For each new commitment, return:
-- title: short description of the commitment
-- context: one sentence explaining the situation
+- title: short, specific description (not "Call X" — say what the call is about if known)
+- context: one sentence explaining the situation and stakes
 - direction: "you_owe" if the user (messages marked [ME]) made the promise, "they_owe" if someone else did
 - source_quote: the exact message text that contains the commitment
 - due_hint: any mentioned deadline or timeframe, converted to a concrete date/time if possible (e.g. "tomorrow" → "May 30", "by EOD" → "today evening"). Empty string if none
-- person_name: the name of the other person involved
+- person_name: the name of the other person involved (must be a real identifiable name, not "Unknown")
+- significance: "high", "medium", or "low"
 
-IMPORTANT — only extract REAL commitments. A commitment is someone explicitly stating they WILL do something, or agreeing to a request. Do NOT extract:
-- Questions ("can you...?", "would you mind...?") — these are requests, not commitments, unless answered with agreement
-- Offers or suggestions ("I could...", "maybe we should...") — only extract if they clearly commit to action
-- Greetings, small talk, reactions, or emotional messages
-- Status updates or announcements that don't involve a promise to act
-- Rhetorical statements or vague intentions ("we should catch up sometime")
-- Messages in any language follow the same rules — translate mentally but apply the same strict standard
+SIGNIFICANCE LEVELS — be ruthlessly honest:
+- HIGH: Deliverables with named recipients and deadlines. Financial obligations. Legal/regulatory actions. Board-level decisions. Commitments to investors, partners, or senior stakeholders. Anything where dropping the ball has real consequences.
+- MEDIUM: Professional follow-ups with clear action items. Sharing specific documents or information. Meeting arrangements with business purpose. Introductions promised to specific people.
+- LOW: Everything else that technically qualifies as a commitment but is low-stakes. Social plans, vague "let's catch up" promises, micro-actions like "I'll ping you", routine operational minutiae.
 
-When in doubt, do NOT extract. False positives are worse than missed commitments.
+DO NOT EXTRACT — these are not commitments at all:
+- Social pleasantries: "I'll come say hi", "let's catch up sometime", "will come soon", "see you there"
+- Conversational filler: "let me check", "I'll get back to you", "will do", "noted", "sure"
+- Questions or requests without agreement: "can you...?", "would you mind...?"
+- Offers or suggestions without commitment: "I could...", "maybe we should..."
+- Greetings, reactions, emotional messages, thank-yous
+- Status updates or announcements without a promise to act
+- Vague intentions with no specific action: "we should think about this"
+- Promises where the person is unknown/unidentifiable
+- Ephemeral micro-coordination: "I'll call you in 2 mins", "coming now", "on my way"
+- Messages in any language follow the same rules
 
-2. AUTO-RESOLVE — this is critical. Carefully check if ANY of the existing open commitments below have been fulfilled, completed, or made irrelevant by the new messages. Be aggressive about detecting resolution. Mark a commitment as resolved if:
+The bar: if a commitment wouldn't survive a weekly priorities review, don't extract it. When in doubt, do NOT extract. An empty list is better than a noisy one.
+
+2. AUTO-RESOLVE — this is critical. Check if ANY existing open commitments below have been fulfilled or made irrelevant. Be aggressive about detecting resolution:
 - The promised action was done (sent a doc, made a call, shared info, etc.)
-- The conversation shows the matter was handled or discussed ("done", "sorted", "taken care of")
-- Someone explicitly confirms completion ("got it", "received", "thanks for doing that")
-- The commitment became moot (plans changed, no longer needed, topic moved on with resolution)
-- A file, link, photo, or voice note was shared that fulfills a promise to send something
-- The person followed through on what they said they'd do, even if they didn't explicitly say "done"
+- The matter was handled or discussed ("done", "sorted", "taken care of")
+- Someone confirms completion ("got it", "received", "thanks for doing that")
+- The commitment became moot (plans changed, no longer needed)
+- A file, link, photo, or voice note was shared that fulfills a promise
+- The person followed through, even without saying "done"
 
-Return JSON in this format:
-{"commitments": [...], "resolved": ["id1", "id2"]}
-
-"commitments" = new commitments found. "resolved" = IDs of existing commitments now fulfilled.
+Return JSON: {"commitments": [...], "resolved": ["id1", "id2"]}
 If nothing found, return {"commitments": [], "resolved": []}.
 `)
 
@@ -314,6 +330,209 @@ If nothing found, return {"commitments": [], "resolved": []}.
 	}
 
 	sb.WriteString("Messages:\n")
+	for _, m := range msgs {
+		prefix := m.SenderName
+		if m.IsFromMe {
+			prefix = "[ME]"
+		}
+		sb.WriteString(fmt.Sprintf("[%s] %s: %s\n",
+			m.Timestamp.Format("Jan 2 3:04PM"),
+			prefix,
+			m.Content,
+		))
+	}
+
+	return sb.String()
+}
+
+func (e *Extractor) StartResolutionLoop(ctx context.Context) {
+	log.Println("resolution sweep loop started")
+
+	// Run staleness check immediately on startup, then periodically
+	e.RunStalenessCheck()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(15 * time.Minute):
+		}
+		e.RunStalenessCheck()
+		if err := e.RunResolutionSweep(ctx); err != nil {
+			log.Printf("resolution sweep error: %v", err)
+		}
+	}
+}
+
+func (e *Extractor) RunStalenessCheck() {
+	// Rule 1: LOW significance >14 days + items >30 days with no chat activity
+	candidates, err := e.db.GetStaleAutoCloseCandidates()
+	if err != nil {
+		log.Printf("staleness check error: %v", err)
+		return
+	}
+
+	closed := 0
+	for _, c := range candidates {
+		if err := e.db.AutoResolveCommitment(c.ID); err != nil {
+			log.Printf("staleness auto-close error for %s: %v", c.ID, err)
+		} else {
+			closed++
+		}
+	}
+
+	// Rule 2: expired ephemeral deadlines (>3 days old with short-term due hints)
+	deadlined, err := e.db.GetExpiredDeadlineCommitments()
+	if err != nil {
+		log.Printf("deadline check error: %v", err)
+	} else {
+		for _, c := range deadlined {
+			if isEphemeralDeadline(c.DueHint) {
+				if err := e.db.AutoResolveCommitment(c.ID); err != nil {
+					log.Printf("deadline auto-close error for %s: %v", c.ID, err)
+				} else {
+					closed++
+				}
+			}
+		}
+	}
+
+	if closed > 0 {
+		log.Printf("staleness check: auto-closed %d stale commitments", closed)
+	}
+}
+
+func isEphemeralDeadline(hint string) bool {
+	h := strings.ToLower(hint)
+
+	// Long-term markers — never treat as ephemeral
+	longTerm := []string{"90 day", "60 day", "30 day", "end of year", "eoy",
+		"end of july", "end of august", "end of september", "end of october",
+		"end of november", "end of december", "q3", "q4",
+		"july", "august", "september", "october", "november", "december"}
+	for _, lt := range longTerm {
+		if strings.Contains(h, lt) {
+			return false
+		}
+	}
+
+	ephemeral := []string{
+		"today", "tonight", "this evening", "this morning", "this afternoon",
+		"shortly", "immediately", "asap", "right away",
+		"tomorrow", "by eod", "end of day",
+		"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+		"next week", "this week",
+	}
+	for _, e := range ephemeral {
+		if strings.Contains(h, e) {
+			return true
+		}
+	}
+	// Specific time patterns: "5:15 PM", "3pm"
+	if strings.Contains(h, "pm") || strings.Contains(h, "am") {
+		return true
+	}
+	// Past month dates: "Jun 5", "June 12" — but NOT July onwards
+	pastMonths := []string{"jan ", "feb ", "mar ", "apr ", "may ", "jun ",
+		"january", "february", "march", "april", "june"}
+	for _, m := range pastMonths {
+		if strings.Contains(h, m) {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
+	apiKey := e.db.GetAPIKey()
+	if apiKey == "" {
+		return nil
+	}
+
+	since := time.Now().Add(-48 * time.Hour)
+	chatJIDs, err := e.db.GetChatsWithRecentOutbound(since)
+	if err != nil {
+		return fmt.Errorf("get chats: %w", err)
+	}
+
+	log.Printf("resolution sweep: checking %d chats with recent outbound messages", len(chatJIDs))
+	resolved := 0
+
+	for _, chatJID := range chatJIDs {
+		commitments, err := e.db.GetOpenCommitmentsForChat(chatJID)
+		if err != nil || len(commitments) == 0 {
+			continue
+		}
+
+		msgs, err := e.db.GetRecentMessagesForChat(chatJID, since)
+		if err != nil || len(msgs) == 0 {
+			continue
+		}
+
+		prompt := buildResolutionPrompt(msgs, commitments)
+		response, err := callClaude(ctx, apiKey, store.FallbackModel, prompt)
+		if err != nil {
+			if strings.Contains(err.Error(), "429") {
+				return err
+			}
+			log.Printf("resolution sweep failed for %s: %v", chatJID, err)
+			continue
+		}
+
+		var result struct {
+			Resolved []string `json:"resolved"`
+		}
+		jsonStr := extractJSON(response)
+		if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+			continue
+		}
+
+		for _, id := range result.Resolved {
+			if err := e.db.AutoResolveCommitment(id); err != nil {
+				log.Printf("resolution sweep auto-resolve error for %s: %v", id, err)
+			} else {
+				resolved++
+				log.Printf("resolution sweep: auto-resolved %s", id)
+			}
+		}
+	}
+
+	if resolved > 0 {
+		log.Printf("resolution sweep: resolved %d commitments", resolved)
+	}
+	return nil
+}
+
+func buildResolutionPrompt(msgs []*store.Message, commitments []*store.Commitment) string {
+	var sb strings.Builder
+	sb.WriteString(`Review these recent WhatsApp messages and determine which of the open commitments below have been RESOLVED.
+
+A commitment is resolved when:
+- The user said "done", "sorted", "sent", "handled", "taken care of", "completed", or similar
+- A file, link, document, or information was shared that fulfills the promise
+- Someone confirms completion ("got it", "received", "thanks for sending")
+- A call was made that fulfills a "call X" or "speak with X" commitment (look for "[Voice call]" or "[Video call]" messages)
+- The matter was discussed and concluded
+- Plans changed, making the commitment moot
+- The promised action clearly happened, even without explicit confirmation
+
+Be AGGRESSIVE about detecting resolution. If the conversation shows the action was likely done, resolve it. When in doubt, resolve — it's better to clean up completed items than to leave stale commitments.
+
+Return JSON: {"resolved": ["id1", "id2"]}
+If nothing resolved, return {"resolved": []}
+
+Open commitments:
+`)
+
+	for _, c := range commitments {
+		dir := "You owe"
+		if c.Direction == "they_owe" {
+			dir = "They owe"
+		}
+		sb.WriteString(fmt.Sprintf("- [ID: %s] %s: %s (%s)\n", c.ID, dir, c.Title, c.PersonName))
+	}
+
+	sb.WriteString("\nRecent messages:\n")
 	for _, m := range msgs {
 		prefix := m.SenderName
 		if m.IsFromMe {

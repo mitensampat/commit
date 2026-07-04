@@ -19,8 +19,28 @@ func (c *Client) handleBotCommand(ctx context.Context, evt *events.Message) bool
 		return false
 	}
 
-	// @commit context pull — works in any chat
 	lower := strings.TrimSpace(strings.ToLower(text))
+
+	// @find — context-aware search, works in self-chat
+	if strings.HasPrefix(lower, "@find") {
+		query := strings.TrimSpace(text[5:]) // preserve original case
+		if query == "" {
+			_ = c.SendMessage(ctx, evt.Info.Chat, "Usage: @find <your question>\n\nExamples:\n@find what did I tell Aakrit about meeting next week?\n@find when did Steve say he'd finish the project?")
+			return true
+		}
+		go func() {
+			_ = c.SendMessage(ctx, evt.Info.Chat, "🔍 Searching...")
+			answer, err := c.findHandler.FindAnswer(ctx, query)
+			if err != nil {
+				_ = c.SendMessage(ctx, evt.Info.Chat, fmt.Sprintf("Search error: %v", err))
+				return
+			}
+			_ = c.SendMessage(ctx, evt.Info.Chat, answer)
+		}()
+		return true
+	}
+
+	// @commit context pull — works in any chat
 	if strings.HasPrefix(lower, "@commit") {
 		query := strings.TrimSpace(strings.TrimPrefix(lower, "@commit"))
 		response := c.cmdContextPull(evt, query)
@@ -314,6 +334,7 @@ func (c *Client) cmdSearch(query string) string {
 func (c *Client) cmdHelp() string {
 	return `*Commit Bot Commands:*
 
+@find <question> — ask your EA anything about your chats
 commitments — list all open commitments
 owe @person — what you owe someone
 done <text> — mark a commitment resolved

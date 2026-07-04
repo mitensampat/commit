@@ -146,6 +146,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/setup/update-key", s.requireAuth(s.handleUpdateKey))
 	s.mux.HandleFunc("/api/backfill", s.requireAuth(s.handleBackfill))
 	s.mux.HandleFunc("/api/debug", s.requireAuth(s.handleDebug))
+	s.mux.HandleFunc("/api/find", s.requireAuth(s.handleFind))
+	s.mux.HandleFunc("/api/commitments/context", s.requireAuth(s.handleCommitmentContext))
+	s.mux.HandleFunc("/api/resolution-sweep", s.handleResolutionSweep)
 	s.mux.HandleFunc("/api/logout", s.requireAuth(s.handleLogout))
 }
 
@@ -1047,6 +1050,106 @@ func (s *Server) handleDebug(w http.ResponseWriter, r *http.Request) {
 		"extraction":      extractionStatus,
 		"recent_messages": recentList,
 	})
+}
+
+func (s *Server) handleFind(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "q parameter required", 400)
+		return
+	}
+	result, err := s.extractor.Find(r.Context(), query)
+	if err != nil {
+		writeJSON(w, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, result)
+}
+
+func (s *Server) handleCommitmentContext(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "id parameter required", 400)
+		return
+	}
+
+	commitment, err := s.db.GetCommitmentByID(id)
+	if err != nil || commitment == nil {
+		http.Error(w, "commitment not found", 404)
+		return
+	}
+
+	type contextMsg struct {
+		Sender    string `json:"sender"`
+		Content   string `json:"content"`
+		Timestamp string `json:"timestamp"`
+		IsFromMe  bool   `json:"is_from_me"`
+		IsSource  bool   `json:"is_source"`
+	}
+
+	var messages []contextMsg
+
+	// Try to find the source message and get surrounding context
+	if commitment.MessageID != "" {
+		msg, _ := s.db.GetMessageByID(commitment.MessageID)
+		if msg != nil {
+			surrounding, _ := s.db.GetMessagesAround(msg.ChatJID, msg.Timestamp.Unix(), 5)
+			for _, m := range surrounding {
+				sender := m.SenderName
+				if m.IsFromMe {
+					sender = "You"
+				}
+				messages = append(messages, contextMsg{
+					Sender:    sender,
+					Content:   m.Content,
+					Timestamp: m.Timestamp.Format("Jan 2, 3:04 PM"),
+					IsFromMe:  m.IsFromMe,
+					IsSource:  m.ID == commitment.MessageID,
+				})
+			}
+		}
+	}
+
+	// Fallback: search by source_quote in the chat
+	if len(messages) == 0 && commitment.SourceQuote != "" && commitment.ChatJID != "" {
+		keywords := []string{commitment.SourceQuote}
+		if len(commitment.SourceQuote) > 60 {
+			keywords = []string{commitment.SourceQuote[:60]}
+		}
+		found, _ := s.db.SearchMessagesInChats([]string{commitment.ChatJID}, keywords, 1)
+		if len(found) > 0 {
+			surrounding, _ := s.db.GetMessagesAround(found[0].ChatJID, found[0].Timestamp.Unix(), 5)
+			for _, m := range surrounding {
+				sender := m.SenderName
+				if m.IsFromMe {
+					sender = "You"
+				}
+				messages = append(messages, contextMsg{
+					Sender:    sender,
+					Content:   m.Content,
+					Timestamp: m.Timestamp.Format("Jan 2, 3:04 PM"),
+					IsFromMe:  m.IsFromMe,
+					IsSource:  false,
+				})
+			}
+		}
+	}
+
+	writeJSON(w, map[string]any{"messages": messages})
+}
+
+func (s *Server) handleResolutionSweep(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "POST required", 405)
+		return
+	}
+	s.extractor.RunStalenessCheck()
+	err := s.extractor.RunResolutionSweep(context.Background())
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "message": "resolution sweep complete"})
 }
 
 func truncate(s string, n int) string {

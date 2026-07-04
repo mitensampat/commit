@@ -25,12 +25,18 @@ import (
 
 type Extractor interface {
 	StartProcessingLoop(ctx context.Context)
+	StartResolutionLoop(ctx context.Context)
+}
+
+type FindHandler interface {
+	FindAnswer(ctx context.Context, query string) (string, error)
 }
 
 type Client struct {
-	db        *store.DB
-	dataDir   string
-	extractor Extractor
+	db          *store.DB
+	dataDir     string
+	extractor   Extractor
+	findHandler FindHandler
 
 	mu           sync.RWMutex
 	wa           *whatsmeow.Client
@@ -52,6 +58,10 @@ func New(db *store.DB, dataDir string, extractor Extractor, appCtx context.Conte
 		qrChan:    make(chan string, 5),
 		appCtx:    appCtx,
 	}
+}
+
+func (c *Client) SetFindHandler(fh FindHandler) {
+	c.findHandler = fh
 }
 
 func (c *Client) HasSession() bool {
@@ -173,6 +183,10 @@ func (c *Client) handleEvent(rawEvt interface{}) {
 		if !c.handleBotCommand(context.Background(), evt) {
 			c.handleMessage(evt)
 		}
+	case *events.CallOffer:
+		c.handleCallEvent(evt.BasicCallMeta, false)
+	case *events.CallOfferNotice:
+		c.handleCallEvent(evt.BasicCallMeta, false)
 	case *events.HistorySync:
 		go c.handleHistorySync(evt)
 	case *events.Connected:
@@ -264,6 +278,54 @@ func (c *Client) handleMessage(evt *events.Message) {
 
 	if err := c.db.SaveMessage(msg); err != nil {
 		log.Printf("save message error: %v", err)
+	}
+}
+
+func (c *Client) handleCallEvent(meta types.BasicCallMeta, isFromMe bool) {
+	callerJID := meta.From
+	chatJID := types.NewJID(callerJID.User, types.DefaultUserServer).String()
+
+	if meta.GroupJID.Server != "" {
+		chatJID = meta.GroupJID.String()
+	}
+
+	if c.db.IsChatMuted(chatJID) {
+		return
+	}
+
+	ownJID := c.GetOwnJID()
+	if !ownJID.IsEmpty() && callerJID.User == ownJID.User {
+		isFromMe = true
+	}
+
+	senderName := ""
+	if !isFromMe {
+		senderName = c.db.GetChatDisplayName(chatJID)
+	}
+
+	content := "[Voice call]"
+	if isFromMe {
+		content = "[Voice call placed]"
+	} else {
+		content = fmt.Sprintf("[Voice call from %s]", senderName)
+	}
+
+	msg := &store.Message{
+		ID:         "call_" + meta.CallID,
+		ChatJID:    chatJID,
+		SenderJID:  callerJID.String(),
+		SenderName: senderName,
+		ChatName:   c.db.GetChatDisplayName(chatJID),
+		Content:    content,
+		Timestamp:  meta.Timestamp,
+		IsFromMe:   isFromMe,
+		IsGroup:    meta.GroupJID.Server != "",
+	}
+
+	if err := c.db.SaveMessage(msg); err != nil {
+		log.Printf("save call event error: %v", err)
+	} else {
+		log.Printf("captured call event: %s in %s", content, chatJID)
 	}
 }
 
@@ -362,6 +424,7 @@ func (c *Client) startLoops(ctx context.Context) {
 	c.loopsStarted = true
 	c.mu.Unlock()
 	go c.extractor.StartProcessingLoop(ctx)
+	go c.extractor.StartResolutionLoop(ctx)
 	go c.reminderLoop(ctx)
 }
 
