@@ -10,6 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"golang.org/x/crypto/bcrypt"
@@ -19,9 +22,10 @@ import (
 )
 
 type DB struct {
-	conn      *sql.DB
-	cryptoMu  sync.RWMutex
-	cryptoKey []byte // derived from passcode, set after auth
+	conn        *sql.DB
+	cryptoMu    sync.RWMutex
+	cryptoKey   []byte // derived from passcode, set after auth
+	keyCachePath string // 0600 file caching the derived key across restarts
 }
 
 func Open(path string) (*DB, error) {
@@ -29,13 +33,41 @@ func Open(path string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	db := &DB{conn: conn}
+	db := &DB{conn: conn, keyCachePath: filepath.Join(filepath.Dir(path), ".crypto_key")}
 	if err := db.migrate(); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	db.ensureMachineKey()
+	db.loadCachedKey()
 	return db, nil
+}
+
+// loadCachedKey restores the passcode-derived crypto key from disk so a
+// restart doesn't leave the API key undecryptable until the next web login.
+// Web sessions persist across restarts, so that login may never come.
+func (db *DB) loadCachedKey() {
+	if db.IsUnlocked() || db.keyCachePath == "" {
+		return
+	}
+	data, err := os.ReadFile(db.keyCachePath)
+	if err != nil {
+		return
+	}
+	key, err := hex.DecodeString(strings.TrimSpace(string(data)))
+	if err != nil || len(key) != 32 {
+		return
+	}
+	db.cryptoMu.Lock()
+	db.cryptoKey = key
+	db.cryptoMu.Unlock()
+}
+
+func (db *DB) cacheKey(key []byte) {
+	if db.keyCachePath == "" {
+		return
+	}
+	os.WriteFile(db.keyCachePath, []byte(hex.EncodeToString(key)), 0600)
 }
 
 func (db *DB) Close() error {
@@ -235,6 +267,7 @@ func (db *DB) deriveKey(passcode string) {
 	db.cryptoMu.Lock()
 	db.cryptoKey = key
 	db.cryptoMu.Unlock()
+	db.cacheKey(key)
 }
 
 func (db *DB) ensureMachineKey() {
