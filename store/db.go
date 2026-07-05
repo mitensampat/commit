@@ -138,7 +138,16 @@ func (db *DB) migrate() error {
 		db.conn.Exec("ALTER TABLE commitments ADD COLUMN snoozed_flag INTEGER NOT NULL DEFAULT 0")
 	}
 
-	db.setSchemaVersion(6)
+	if version < 7 {
+		// Web sessions persist across restarts. Only the SHA-256 of the
+		// token is stored, so reading the DB can't impersonate a session.
+		db.conn.Exec(`CREATE TABLE IF NOT EXISTS sessions (
+			token_hash TEXT PRIMARY KEY,
+			expires_at INTEGER NOT NULL
+		)`)
+	}
+
+	db.setSchemaVersion(7)
 	return nil
 }
 

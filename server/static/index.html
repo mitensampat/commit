@@ -1368,7 +1368,7 @@
             background: var(--surface);
             border: 1px solid var(--line);
             border-radius: 0;
-            padding: 14px 18px;
+            padding: 12px 16px;
             margin-bottom: 6px;
             transition: all 0.15s;
             position: relative;
@@ -1441,15 +1441,15 @@
             font-size: 13.5px;
             font-weight: 500;
             color: var(--ink);
-            line-height: 1.5;
-            margin-bottom: 4px;
+            line-height: 1.45;
+            margin-bottom: 2px;
         }
 
         .commitment-context {
             font-size: 12px;
             color: var(--ink-secondary);
-            line-height: 1.5;
-            margin-bottom: 8px;
+            line-height: 1.45;
+            margin-bottom: 6px;
         }
 
         .commitment-source {
@@ -2091,8 +2091,9 @@
         .commitment-meta {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-top: 6px;
+            flex-wrap: wrap;
+            gap: 4px 10px;
+            margin-top: 5px;
         }
 
         .commitment-date {
@@ -2254,16 +2255,17 @@
             .content-inner { padding: 0 16px; max-width: 100%; }
             .commitment-source { display: none; }
             .summary-stat .stat-value { font-size: 16px; }
-            .commitment-card { padding: 12px 14px; }
+            .commitment-card { padding: 10px 12px; margin-bottom: 4px; }
             .commitment-top { flex-wrap: wrap; }
             .commitment-body { width: 100%; }
+            .commitment-context { margin-bottom: 4px; }
             .commitment-actions {
                 opacity: 1;
                 width: 100%;
-                margin-top: 10px;
-                padding-top: 8px;
+                margin-top: 8px;
+                padding-top: 6px;
                 border-top: 1px solid var(--line);
-                gap: 8px;
+                gap: 6px;
             }
             .commitment-actions .action-btn { flex: 1; justify-content: center; }
             .favorite-btn, .reminder-btn { opacity: 1 !important; position: static; flex-shrink: 0; }
@@ -2660,7 +2662,7 @@
             <div class="search-hints">
                 <span class="search-hint"><span class="search-hint-cmd">@find</span> Ask anything about your chats</span>
                 <span class="search-hint-sep"></span>
-                <span class="search-hint"><span class="search-hint-cmd">@commit</span> Show context in any chat</span>
+                <span class="search-hint"><span class="search-hint-cmd">@commit</span> In any WhatsApp chat, see what's open there</span>
             </div>
         </div>
 
