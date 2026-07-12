@@ -913,3 +913,29 @@ func (db *DB) GetResolvedCountSince(since time.Time) (int, error) {
 		since.Unix()).Scan(&n)
 	return n, err
 }
+
+// DayStats summarizes activity for one local calendar day.
+type DayStats struct {
+	Messages    int `json:"messages"`
+	Commitments int `json:"commitments"`
+}
+
+// GetDayStats returns message and commitment counts for the local day
+// offset days back from today (0 = today, 1 = yesterday).
+func (db *DB) GetDayStats(offset int) (*DayStats, error) {
+	now := time.Now()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -offset)
+	dayEnd := dayStart.AddDate(0, 0, 1)
+	s := &DayStats{}
+	if err := db.conn.QueryRow(
+		"SELECT COUNT(*) FROM messages WHERE timestamp >= ? AND timestamp < ?",
+		dayStart.Unix(), dayEnd.Unix()).Scan(&s.Messages); err != nil {
+		return nil, err
+	}
+	if err := db.conn.QueryRow(
+		"SELECT COUNT(*) FROM commitments WHERE created_at >= ? AND created_at < ?",
+		dayStart.Unix(), dayEnd.Unix()).Scan(&s.Commitments); err != nil {
+		return nil, err
+	}
+	return s, nil
+}

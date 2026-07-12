@@ -84,17 +84,35 @@ func main() {
 		log.Fatalf("failed to listen on %s: %v", addr, err)
 	}
 
+	dashboardURL := fmt.Sprintf("http://localhost:%d", defaultPort)
 	if hasHostsEntry {
-		log.Printf("Commit running at http://commit:%d", defaultPort)
-		openBrowser(fmt.Sprintf("http://commit:%d", defaultPort))
-	} else {
-		log.Printf("Commit running at http://localhost:%d", defaultPort)
-		openBrowser(fmt.Sprintf("http://localhost:%d", defaultPort))
+		dashboardURL = fmt.Sprintf("http://commit:%d", defaultPort)
+	}
+	log.Printf("Commit running at %s", dashboardURL)
+	openBrowser(dashboardURL)
+
+	// Headless mode: no menu bar / tray icon, server blocks on main.
+	if os.Getenv("COMMIT_NO_TRAY") == "1" {
+		if err := srv.Serve(ctx, ln); err != nil {
+			log.Fatalf("server error: %v", err)
+		}
+		return
 	}
 
-	if err := srv.Serve(ctx, ln); err != nil {
-		log.Fatalf("server error: %v", err)
-	}
+	// The tray owns the main thread (AppKit requirement on macOS);
+	// the HTTP server runs alongside it.
+	serverDone := make(chan error, 1)
+	go func() {
+		serverDone <- srv.Serve(ctx, ln)
+	}()
+	go func() {
+		if err := <-serverDone; err != nil {
+			log.Printf("server error: %v", err)
+			cancel()
+		}
+	}()
+
+	runTray(ctx, cancel, db, wa, extractor, dashboardURL)
 }
 
 func ensureHostsEntry() bool {

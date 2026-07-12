@@ -13,7 +13,7 @@
 #   --skip-notarize    Sign but skip notarization
 set -e
 
-VERSION="1.3.2"
+VERSION="1.4.0"
 APP_NAME="Commit"
 BUNDLE_ID="com.msfoundry.commit"
 DMG_NAME="Commit-${VERSION}.dmg"
@@ -47,8 +47,8 @@ echo ""
 # Step 1: Build universal binary (arm64 + amd64)
 if [[ "${SKIP_BUILD}" == "0" ]]; then
     echo "Compiling universal binary..."
-    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o /tmp/commit-arm64 .
-    CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o /tmp/commit-amd64 .
+    CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o /tmp/commit-arm64 .
+    CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o /tmp/commit-amd64 .
     lipo -create /tmp/commit-arm64 /tmp/commit-amd64 -output /tmp/commit-universal
     rm /tmp/commit-arm64 /tmp/commit-amd64
     echo "  Done"
