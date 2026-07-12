@@ -155,6 +155,12 @@ func runTray(ctx context.Context, cancel context.CancelFunc, db *store.DB, wa *w
 	systray.Run(onReady, onExit)
 }
 
+// quitTray tears down the systray loop; safe to call more than once.
+func quitTray() {
+	defer func() { recover() }()
+	systray.Quit()
+}
+
 func setTrayIcon(s trayState) {
 	if runtime.GOOS == "windows" {
 		switch s {

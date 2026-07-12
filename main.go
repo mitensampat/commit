@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -78,16 +79,26 @@ func main() {
 
 	hasHostsEntry := ensureHostsEntry()
 
-	addr := fmt.Sprintf("0.0.0.0:%d", defaultPort)
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("failed to listen on %s: %v", addr, err)
-	}
-
 	dashboardURL := fmt.Sprintf("http://localhost:%d", defaultPort)
 	if hasHostsEntry {
 		dashboardURL = fmt.Sprintf("http://commit:%d", defaultPort)
 	}
+
+	addr := fmt.Sprintf("0.0.0.0:%d", defaultPort)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		// Single-instance behavior: if another Commit already owns the port,
+		// just bring up its dashboard and exit quietly. A Fatalf here is
+		// invisible when launched from Finder.
+		if resp, herr := http.Get(fmt.Sprintf("http://localhost:%d/api/version", defaultPort)); herr == nil {
+			resp.Body.Close()
+			log.Printf("another Commit instance is already running — opening its dashboard")
+			openBrowser(dashboardURL)
+			return
+		}
+		log.Fatalf("failed to listen on %s: %v", addr, err)
+	}
+
 	log.Printf("Commit running at %s", dashboardURL)
 	openBrowser(dashboardURL)
 
@@ -101,15 +112,15 @@ func main() {
 
 	// The tray owns the main thread (AppKit requirement on macOS);
 	// the HTTP server runs alongside it.
-	serverDone := make(chan error, 1)
 	go func() {
-		serverDone <- srv.Serve(ctx, ln)
-	}()
-	go func() {
-		if err := <-serverDone; err != nil {
+		err := srv.Serve(ctx, ln)
+		if err != nil {
 			log.Printf("server error: %v", err)
-			cancel()
 		}
+		// If the server stops for any reason, take the tray down with it —
+		// a menu bar icon without a working dashboard is a zombie.
+		cancel()
+		quitTray()
 	}()
 
 	runTray(ctx, cancel, db, wa, extractor, dashboardURL)
