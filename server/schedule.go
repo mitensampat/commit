@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -180,18 +182,24 @@ func (s *Server) handleScheduleOAuthStart(w http.ResponseWriter, r *http.Request
 			oauthBusy = false
 			oauthMu.Unlock()
 		}()
-		tok, err := flow.Wait(r.Context())
+		// NOT r.Context(): the request context dies when this handler
+		// returns, long before the user finishes Google's consent screen.
+		tok, err := flow.Wait(context.Background())
 		if err != nil {
+			log.Printf("google oauth: %v", err)
 			oauthMu.Lock()
 			oauthErr = err.Error()
 			oauthMu.Unlock()
 			return
 		}
 		if err := schedule.NewTokenStore(s.db).SaveToken(tok); err != nil {
+			log.Printf("google oauth: token received but could not be stored: %v", err)
 			oauthMu.Lock()
 			oauthErr = "token received but could not be stored: " + err.Error()
 			oauthMu.Unlock()
+			return
 		}
+		log.Printf("google oauth: calendar connected, token stored")
 	}()
 	writeJSON(w, map[string]string{"auth_url": authURL})
 }
