@@ -50,6 +50,8 @@ type Client struct {
 	pendingMu      sync.Mutex
 	pendingChoices []string // person names awaiting disambiguation
 
+	selfChatJID types.JID // observed self-chat thread (LID-safe), see rememberSelfChat
+
 	scheduler *schedule.Manager // @schedule sessions (nil until InitScheduler)
 }
 
@@ -366,20 +368,17 @@ func (c *Client) SendMessage(ctx context.Context, jid types.JID, text string) er
 }
 
 func (c *Client) Notify(text string) {
-	ownJID := c.GetOwnJID()
-	if ownJID.IsEmpty() {
+	selfJID, ok := c.SelfChatTarget()
+	if !ok {
 		return
 	}
-	selfJID := types.NewJID(ownJID.User, types.DefaultUserServer)
 	if err := c.SendMessage(c.appCtx, selfJID, text); err != nil {
 		log.Printf("notify error: %v", err)
 	}
 }
 
 func (c *Client) SendWelcomeMessages(ctx context.Context, onStage func(stage string)) {
-	ownJID := c.GetOwnJID()
-	if !ownJID.IsEmpty() {
-		selfJID := types.NewJID(ownJID.User, types.DefaultUserServer)
+	if selfJID, ok := c.SelfChatTarget(); ok {
 		_ = c.SendMessage(ctx, selfJID, "✅ Connected to Commit. Your dashboard is ready.")
 	}
 
@@ -398,15 +397,59 @@ func (c *Client) isSelfChat(evt *events.Message) bool {
 	// Old format: chat is your phone number @s.whatsapp.net
 	ownJID := c.GetOwnJID()
 	if !ownJID.IsEmpty() && chat.User == ownJID.User {
+		c.rememberSelfChat(chat)
 		return true
 	}
 
 	// New LID format: self-chat is your LID @lid, sender LID matches chat
 	if chat.Server == types.HiddenUserServer && sender.User == chat.User {
+		c.rememberSelfChat(chat)
 		return true
 	}
 
 	return false
+}
+
+// rememberSelfChat caches (and persists) the JID of the user's self-chat as
+// observed from real traffic. On LID-paired sessions Store.ID can be empty or
+// phone-format while the actual self-chat thread is @lid — the observed JID
+// is the only reliable target for self-sends (digest, reminders, @schedule).
+func (c *Client) rememberSelfChat(jid types.JID) {
+	c.mu.Lock()
+	changed := c.selfChatJID.String() != jid.String()
+	c.selfChatJID = jid
+	c.mu.Unlock()
+	if changed {
+		if err := c.db.SetSetting("self_chat_jid", jid.String()); err != nil {
+			log.Printf("persist self chat jid: %v", err)
+		} else {
+			log.Printf("self-chat JID learned: %s", jid.String())
+		}
+	}
+}
+
+// SelfChatTarget returns the best-known JID for messaging yourself:
+// observed self-chat (memory, then persisted) with Store.ID as fallback.
+func (c *Client) SelfChatTarget() (types.JID, bool) {
+	c.mu.RLock()
+	cached := c.selfChatJID
+	c.mu.RUnlock()
+	if !cached.IsEmpty() {
+		return cached, true
+	}
+	if saved := c.db.GetSetting("self_chat_jid"); saved != "" {
+		if jid, err := types.ParseJID(saved); err == nil && !jid.IsEmpty() {
+			c.mu.Lock()
+			c.selfChatJID = jid
+			c.mu.Unlock()
+			return jid, true
+		}
+	}
+	own := c.GetOwnJID()
+	if !own.IsEmpty() {
+		return types.NewJID(own.User, types.DefaultUserServer), true
+	}
+	return types.JID{}, false
 }
 
 func (c *Client) GetOwnJID() types.JID {
@@ -483,9 +526,7 @@ func (c *Client) reminderLoop(ctx context.Context) {
 				}
 				text := fmt.Sprintf("⏰ Reminder: %s — %s\n\n%s", cm.Title, direction, cm.Context)
 
-				ownJID := c.GetOwnJID()
-				if !ownJID.IsEmpty() {
-					selfJID := types.NewJID(ownJID.User, types.DefaultUserServer)
+				if selfJID, ok := c.SelfChatTarget(); ok {
 					if err := c.SendMessage(ctx, selfJID, text); err != nil {
 						log.Printf("send reminder error: %v", err)
 						continue
@@ -536,11 +577,10 @@ func (c *Client) morningDigestLoop(ctx context.Context) {
 					b.WriteString(" — " + it.Reason)
 				}
 			}
-			ownJID := c.GetOwnJID()
-			if ownJID.IsEmpty() {
+			selfJID, ok := c.SelfChatTarget()
+			if !ok {
 				continue
 			}
-			selfJID := types.NewJID(ownJID.User, types.DefaultUserServer)
 			if err := c.SendMessage(ctx, selfJID, b.String()); err != nil {
 				log.Printf("morning digest send error: %v", err)
 				continue

@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -18,11 +19,12 @@ import (
 type waSender struct{ c *Client }
 
 func (s *waSender) SendSelf(ctx context.Context, text string) (string, error) {
-	own := s.c.GetOwnJID()
-	if own.IsEmpty() {
+	target, ok := s.c.SelfChatTarget()
+	if !ok {
+		log.Printf("schedule: SendSelf: no self-chat target known yet")
 		return "", errNotConnected
 	}
-	return s.send(ctx, types.NewJID(own.User, types.DefaultUserServer), text)
+	return s.send(ctx, target, text)
 }
 
 func (s *waSender) SendTo(ctx context.Context, jid, text string) (string, error) {
@@ -38,6 +40,7 @@ func (s *waSender) send(ctx context.Context, jid types.JID, text string) (string
 	client := s.c.wa
 	s.c.mu.RUnlock()
 	if client == nil {
+		log.Printf("schedule: send: c.wa is nil")
 		return "", errNotConnected
 	}
 	resp, err := client.SendMessage(ctx, jid, &waE2E.Message{Conversation: &text})
@@ -62,11 +65,11 @@ func (c *Client) InitScheduler(db *store.DB) {
 		Sender: &waSender{c: c},
 		Creds:  creds,
 		SelfJID: func() string {
-			own := c.GetOwnJID()
-			if own.IsEmpty() {
+			target, ok := c.SelfChatTarget()
+			if !ok {
 				return ""
 			}
-			return types.NewJID(own.User, types.DefaultUserServer).String()
+			return target.String()
 		},
 	}
 }
