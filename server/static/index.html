@@ -860,6 +860,16 @@
         .today-reason.deadline { background: var(--warning-light); color: var(--warning); }
         .today-reason.stale { background: var(--info-light); color: var(--info); }
         .today-reason.plain { background: var(--surface-sunken); color: var(--ink-tertiary); }
+        .closure-evidence {
+            font-size: 12px;
+            font-style: italic;
+            color: var(--ink-secondary);
+            margin-top: 4px;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
         .trust-line {
             font-size: 12px;
             color: var(--ink-faint);
@@ -3284,10 +3294,35 @@
                 html += '</div>';
             }
 
+            const pendingClosures = today.pending_closures || [];
             const trustBits = [];
             if (today.snoozed > 0) trustBits.push(`${today.snoozed} snoozed`);
             if (today.auto_closed_week > 0) trustBits.push(`<a onclick="switchTab('resolved', document.getElementById('tab-resolved'))">Commit auto-closed ${today.auto_closed_week} this week</a>`);
+            if (pendingClosures.length > 0) trustBits.push(`${pendingClosures.length} awaiting your confirmation`);
             if (trustBits.length > 0) html += `<div class="trust-line">${trustBits.join(' &middot; ')}</div>`;
+
+            if (pendingClosures.length > 0) {
+                html += '<div class="today-section-label">Closures to confirm</div><div class="attention-section">';
+                for (const p of pendingClosures) {
+                    const person = p.person_name || p.chat_name || '';
+                    html += `<div class="commitment-card" id="closure-${escAttr(p.commitment_id)}">
+                        <div class="commitment-top">
+                            <div class="commitment-body">
+                                <div class="commitment-title">${esc(p.title)}</div>
+                                <div class="today-meta">
+                                    ${person ? `<span class="today-person">${esc(person)}</span>` : ''}
+                                </div>
+                                ${p.evidence ? `<div class="closure-evidence">&ldquo;${esc(p.evidence)}&rdquo;</div>` : ''}
+                            </div>
+                            <div class="commitment-actions">
+                                <button class="action-btn done" onclick="confirmClosure('${escAttr(p.commitment_id)}')">Confirm</button>
+                                <button class="action-btn" onclick="rejectClosure('${escAttr(p.commitment_id)}')">Keep open</button>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+                html += '</div>';
+            }
 
             const favGroups = (favView && favView.open) || [];
             if (favGroups.length > 0) {
@@ -3322,6 +3357,34 @@
             </div>`;
 
             container.innerHTML = html;
+        }
+
+        async function confirmClosure(id) {
+            try {
+                await api('/api/closures/confirm', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ id })
+                });
+                broadcastChange();
+                loadDashboard();
+            } catch (e) {
+                console.error('confirm closure error:', e);
+            }
+        }
+
+        async function rejectClosure(id) {
+            try {
+                await api('/api/closures/reject', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ id })
+                });
+                broadcastChange();
+                loadDashboard();
+            } catch (e) {
+                console.error('reject closure error:', e);
+            }
         }
 
         async function snoozeCommitment(id) {

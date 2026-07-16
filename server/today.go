@@ -26,12 +26,17 @@ func (s *Server) handleToday(w http.ResponseWriter, r *http.Request) {
 	snoozed, _ := s.db.GetSnoozedCount()
 	autoClosed, _ := s.db.GetAutoResolvedCountSince(weekAgo)
 	resolvedWeek, _ := s.db.GetResolvedCountSince(weekAgo)
+	pendingClosures, _ := s.db.GetPendingClosures()
+	if pendingClosures == nil {
+		pendingClosures = []*store.PendingClosure{}
+	}
 
 	writeJSON(w, map[string]any{
 		"items":            items,
 		"snoozed":          snoozed,
 		"auto_closed_week": autoClosed,
 		"resolved_week":    resolvedWeek,
+		"pending_closures": pendingClosures,
 	})
 }
 

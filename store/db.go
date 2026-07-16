@@ -179,7 +179,28 @@ func (db *DB) migrate() error {
 		)`)
 	}
 
-	db.setSchemaVersion(7)
+	if version < 8 {
+		// Tiered auto-close: mid-confidence closure detections wait here for
+		// the user to confirm or reject instead of closing silently.
+		db.conn.Exec(`CREATE TABLE IF NOT EXISTS pending_closures (
+			commitment_id TEXT PRIMARY KEY,
+			confidence    REAL NOT NULL,
+			evidence      TEXT NOT NULL DEFAULT '',
+			closure_type  TEXT NOT NULL DEFAULT '',
+			detected_at   INTEGER NOT NULL
+		)`)
+		// Rejected detections are kept as future training data.
+		db.conn.Exec(`CREATE TABLE IF NOT EXISTS closure_rejections (
+			commitment_id TEXT NOT NULL,
+			confidence    REAL NOT NULL DEFAULT 0,
+			evidence      TEXT NOT NULL DEFAULT '',
+			closure_type  TEXT NOT NULL DEFAULT '',
+			detected_at   INTEGER NOT NULL DEFAULT 0,
+			rejected_at   INTEGER NOT NULL
+		)`)
+	}
+
+	db.setSchemaVersion(8)
 	return nil
 }
 

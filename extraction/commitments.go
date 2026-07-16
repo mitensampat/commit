@@ -61,7 +61,83 @@ type extractedCommitment struct {
 
 type extractionResult struct {
 	Commitments []extractedCommitment `json:"commitments"`
-	Resolved    []string              `json:"resolved"`
+	Closures    []ClosureDetection    `json:"closures"`
+	// Legacy field: older prompts (and occasionally the model) return bare
+	// IDs. Treated as mid-confidence context completions.
+	Resolved []string `json:"resolved"`
+}
+
+// ClosureDetection is one scored claim that an open commitment is done.
+type ClosureDetection struct {
+	ID          string  `json:"id"`
+	Confidence  float64 `json:"confidence"`
+	Evidence    string  `json:"evidence"`
+	ClosureType string  `json:"closure_type"` // direct_completion | recipient_acknowledgment | context_completion | moot
+}
+
+// Confidence tiers for closure detections.
+const (
+	autoCloseThreshold = 0.85 // auto-close silently, resolved_by='auto'
+	pendingThreshold   = 0.60 // queue for user confirmation; below this, ignore
+)
+
+// legacyConfidence is assigned when the model returns a bare resolved ID with
+// no score — enough to surface for confirmation, never to close silently.
+const legacyConfidence = 0.70
+
+// applyClosureDetections routes each detection into its tier. Returns how
+// many commitments were auto-closed and how many were queued for the user.
+func (e *Extractor) applyClosureDetections(dets []ClosureDetection, source string) (autoClosed, queued int) {
+	for _, d := range dets {
+		if d.ID == "" {
+			continue
+		}
+		conf := d.Confidence
+		if conf < 0 {
+			conf = 0
+		} else if conf > 1 {
+			conf = 1
+		}
+		switch {
+		case conf >= autoCloseThreshold:
+			if err := e.db.AutoResolveCommitment(d.ID); err != nil {
+				log.Printf("%s: auto-resolve error for %s: %v", source, d.ID, err)
+				continue
+			}
+			e.db.DeletePendingClosure(d.ID)
+			autoClosed++
+			log.Printf("%s: auto-closed %s (%.2f %s)", source, d.ID, conf, d.ClosureType)
+		case conf >= pendingThreshold:
+			if e.db.HasPendingClosure(d.ID) {
+				continue
+			}
+			if err := e.db.SavePendingClosure(d.ID, conf, d.Evidence, d.ClosureType); err != nil {
+				log.Printf("%s: save pending closure error for %s: %v", source, d.ID, err)
+				continue
+			}
+			queued++
+			log.Printf("%s: queued closure of %s for confirmation (%.2f %s)", source, d.ID, conf, d.ClosureType)
+		}
+	}
+	return autoClosed, queued
+}
+
+// closureDetections merges scored closures with any legacy bare-ID
+// resolutions into one detection list.
+func (r *extractionResult) closureDetections() []ClosureDetection {
+	dets := r.Closures
+	seen := make(map[string]bool, len(dets))
+	for _, d := range dets {
+		seen[d.ID] = true
+	}
+	for _, id := range r.Resolved {
+		if !seen[id] {
+			dets = append(dets, ClosureDetection{
+				ID: id, Confidence: legacyConfidence, ClosureType: "context_completion",
+			})
+		}
+	}
+	return dets
 }
 
 const (
@@ -214,13 +290,7 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			}
 		}
 
-		for _, resolvedID := range result.Resolved {
-			if err := e.db.AutoResolveCommitment(resolvedID); err != nil {
-				log.Printf("auto-resolve error for %s: %v", resolvedID, err)
-			} else {
-				log.Printf("auto-resolved commitment %s", resolvedID)
-			}
-		}
+		e.applyClosureDetections(result.closureDetections(), "extraction")
 
 		ids := make([]string, len(chatMsgs))
 		for i, m := range chatMsgs {
@@ -305,16 +375,13 @@ DO NOT EXTRACT — these are not commitments at all:
 
 The bar: if a CEO wouldn't track this on a sticky note, don't extract it. When in doubt, do NOT extract. An empty list is better than a noisy one.
 
-2. AUTO-RESOLVE — this is critical. Check if ANY existing open commitments below have been fulfilled or made irrelevant. Be aggressive about detecting resolution:
-- The promised action was done (sent a doc, made a call, shared info, etc.)
-- The matter was handled or discussed ("done", "sorted", "taken care of")
-- Someone confirms completion ("got it", "received", "thanks for doing that")
-- The commitment became moot (plans changed, no longer needed)
-- A file, link, photo, or voice note was shared that fulfills a promise
-- The person followed through, even without saying "done"
+2. DETECT CLOSURES — check if ANY existing open commitments below have been fulfilled or made irrelevant. For each candidate, score your confidence honestly:
 
-Return JSON: {"commitments": [...], "resolved": ["id1", "id2"]}
-If nothing found, return {"commitments": [], "resolved": []}.
+`)
+	sb.WriteString(closureRubric)
+	sb.WriteString(`
+Return JSON: {"commitments": [...], "closures": [{"id": "...", "confidence": 0.0, "evidence": "...", "closure_type": "..."}]}
+If nothing found, return {"commitments": [], "closures": []}.
 `)
 
 	if len(openCommitments) > 0 {
@@ -464,6 +531,8 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 	log.Printf("resolution sweep: checking %d chats with recent outbound messages", len(chatJIDs))
 	resolved := 0
 
+	queued := 0
+
 	for _, chatJID := range chatJIDs {
 		commitments, err := e.db.GetOpenCommitmentsForChat(chatJID)
 		if err != nil || len(commitments) == 0 {
@@ -485,47 +554,55 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 			continue
 		}
 
-		var result struct {
-			Resolved []string `json:"resolved"`
-		}
+		var result extractionResult
 		jsonStr := extractJSON(response)
 		if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
 			continue
 		}
 
-		for _, id := range result.Resolved {
-			if err := e.db.AutoResolveCommitment(id); err != nil {
-				log.Printf("resolution sweep auto-resolve error for %s: %v", id, err)
-			} else {
-				resolved++
-				log.Printf("resolution sweep: auto-resolved %s", id)
-			}
-		}
+		a, q := e.applyClosureDetections(result.closureDetections(), "resolution sweep")
+		resolved += a
+		queued += q
 	}
 
-	if resolved > 0 {
-		log.Printf("resolution sweep: resolved %d commitments", resolved)
+	if resolved > 0 || queued > 0 {
+		log.Printf("resolution sweep: auto-closed %d, queued %d for confirmation", resolved, queued)
 	}
 	return nil
 }
 
+// closureRubric is the shared confidence-scored closure detection rubric used
+// by both the extraction prompt and the resolution sweep prompt.
+const closureRubric = `For each open commitment that looks completed or moot, return an object with:
+- id: the commitment's ID
+- confidence: 0.0-1.0, your honest probability that this commitment is truly done or no longer needed
+- evidence: ONE short verbatim quote from the messages that best supports the closure (the exact text, not a paraphrase)
+- closure_type: one of
+  - "direct_completion": the person who owes it explicitly says it's done ("sent", "done", "sorted", "paid it") or visibly does it (shares the file/link/doc, "[Voice call]" fulfilling a call promise)
+  - "recipient_acknowledgment": the OTHER party confirms receipt or completion ("got it", "received, thanks", "perfect, see you then")
+  - "context_completion": the conversation implies the action happened without anyone saying so (topic concluded, follow-up discussion assumes it was done)
+  - "moot": plans changed or the commitment is no longer needed
+
+CONFIDENCE CALIBRATION — be honest, not aggressive:
+- 0.90-1.00: unambiguous. Direct statement of completion or the deliverable itself appears in the chat, clearly matching THIS commitment.
+- 0.85-0.89: very likely done — strong direct or acknowledgment signal, minor ambiguity about which commitment it matches.
+- 0.60-0.84: probably done, but the evidence is indirect: vague confirmations ("ok great", "thanks"), context implying completion, a call that may or may not have covered the topic, or plans that seem to have changed.
+- below 0.60: a hunch. Mere replies, topic changes, pleasantries, or silence are NOT closure evidence.
+
+Never mark high confidence just because the chat moved on. A commitment with no completion signal stays open.`
+
 func buildResolutionPrompt(msgs []*store.Message, commitments []*store.Commitment) string {
 	var sb strings.Builder
-	sb.WriteString(`Review these recent WhatsApp messages and determine which of the open commitments below have been RESOLVED.
+	sb.WriteString(`Review these recent WhatsApp messages and determine which of the open commitments below have been completed or made irrelevant.
 
-A commitment is resolved when:
-- The user said "done", "sorted", "sent", "handled", "taken care of", "completed", or similar
-- A file, link, document, or information was shared that fulfills the promise
-- Someone confirms completion ("got it", "received", "thanks for sending")
-- A call was made that fulfills a "call X" or "speak with X" commitment (look for "[Voice call]" or "[Video call]" messages)
-- The matter was discussed and concluded
-- Plans changed, making the commitment moot
-- The promised action clearly happened, even without explicit confirmation
+`)
+	sb.WriteString(closureRubric)
+	sb.WriteString(`
 
-Be AGGRESSIVE about detecting resolution. If the conversation shows the action was likely done, resolve it. When in doubt, resolve — it's better to clean up completed items than to leave stale commitments.
+Messages from the user are marked [ME].
 
-Return JSON: {"resolved": ["id1", "id2"]}
-If nothing resolved, return {"resolved": []}
+Return JSON: {"closures": [{"id": "...", "confidence": 0.0, "evidence": "...", "closure_type": "..."}]}
+If nothing looks closed, return {"closures": []}
 
 Open commitments:
 `)
