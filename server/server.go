@@ -155,6 +155,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/closures/reject", s.requireAuth(s.handleClosureReject))
 	s.mux.HandleFunc("/api/resolution-sweep", s.handleResolutionSweep)
 	s.mux.HandleFunc("/api/logout", s.requireAuth(s.handleLogout))
+
+	// Scheduling (@schedule feature) routes live in schedule.go.
+	s.registerScheduleRoutes()
 }
 
 func (s *Server) generateSession() string {

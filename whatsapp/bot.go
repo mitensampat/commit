@@ -55,6 +55,13 @@ func (c *Client) handleBotCommand(ctx context.Context, evt *events.Message) bool
 		return false
 	}
 
+	// @schedule commands and in-session consent words (propose / yes / edit /
+	// leave it / draft replacements) — must run before the legacy command
+	// switch so session replies win.
+	if c.handleScheduleSelfChat(evt, text) {
+		return true
+	}
+
 	cmd := lower
 	var response string
 
