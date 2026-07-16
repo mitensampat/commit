@@ -383,7 +383,7 @@ func (db *DB) decrypt(stored string) (string, error) {
 
 // Model
 
-const DefaultModel = "claude-sonnet-4-6-20250620"
+const DefaultModel = "claude-sonnet-5"
 const FallbackModel = "claude-haiku-4-5-20251001"
 
 func (db *DB) GetModel() string {
