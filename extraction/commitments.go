@@ -176,12 +176,31 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			continue
 		}
 
+		savedTitles := make([][2]string, 0, len(openCommitments)) // [direction, title]
+		for _, oc := range openCommitments {
+			savedTitles = append(savedTitles, [2]string{oc.Direction, oc.Title})
+		}
 		for _, ec := range result.Commitments {
 			sig := ec.Significance
 			if sig != "high" && sig != "medium" && sig != "low" {
 				sig = "medium"
 			}
 			if sig == "low" {
+				continue
+			}
+			// Save-time dedupe: hash-based INSERT OR IGNORE only catches
+			// byte-identical titles; paraphrased re-extractions of the same
+			// promise get fresh IDs. Skip anything title-similar to an open
+			// commitment in this chat (or one saved earlier in this batch).
+			dupe := false
+			for _, st := range savedTitles {
+				if st[0] == ec.Direction && store.TitlesSimilar(st[1], ec.Title, 0.5) {
+					dupe = true
+					break
+				}
+			}
+			if dupe {
+				log.Printf("skipping near-duplicate commitment in %s: %q", chatJID, ec.Title)
 				continue
 			}
 			c := &store.Commitment{
@@ -211,6 +230,8 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			}
 			if err := e.db.SaveCommitment(c); err != nil {
 				log.Printf("save commitment error: %v", err)
+			} else {
+				savedTitles = append(savedTitles, [2]string{c.Direction, c.Title})
 			}
 		}
 
@@ -277,8 +298,13 @@ func BuildExtractionPrompt(msgs []*store.Message, openCommitments []*store.Commi
 
 The user is a CEO. Only surface commitments that would matter to a sharp executive assistant — things that, if dropped, would damage a relationship, miss a deadline, lose money, or block someone important. Think: "Would this be embarrassing if forgotten?"
 
+THE CONSEQUENCE TEST — apply to every candidate before extracting. You must be able to answer BOTH:
+1. WHO is waiting on this? (a specific, named person or group)
+2. WHAT breaks if it's forgotten? (a missed deadline, lost money, a blocked person, or real relationship damage)
+If you cannot answer both concretely, do NOT extract. "It would be polite to follow up" is not a consequence.
+
 For each new commitment, return:
-- title: short, specific description (not "Call X" — say what the call is about if known)
+- title: short, specific, and SELF-CONTAINED — it must make sense two weeks later with no chat context. Name the deliverable and the counterparty ("Share final ESOP deck with Kunal", not "Send the deck"; "Intro Priya to the Series-B lead at Fund X", not "Make the intro"). Never use bare pronouns ("send it to him")
 - context: one sentence explaining the situation and stakes
 - direction: "you_owe" if the user (messages marked [ME]) made the promise, "they_owe" if someone else did
 - source_quote: the exact message text that contains the commitment
@@ -304,6 +330,9 @@ DO NOT EXTRACT — these are not commitments at all:
 - Promises where the person is unknown/unidentifiable
 - Ephemeral micro-coordination: "I'll call you in 2 mins", "coming now", "on my way", "reaching in 10"
 - Generic follow-ups with no specific deliverable: "will follow up", "will circle back", "will touch base"
+- Meeting/event/call ATTENDANCE: "I'll join the call", "will attend the leadership meeting every Tuesday", "see you at the board dinner" — showing up is the calendar's job, not a commitment. Only extract a DELIVERABLE promised for a meeting ("I'll bring the revised forecast to Tuesday's meeting"), never the attendance itself
+- Scheduling logistics: agreeing on a time, moving a meeting, "does 3pm work?", sending an invite
+- DUPLICATES of existing open commitments (listed below, when present): if a message restates, paraphrases, confirms, or nudges an already-tracked promise — even in different words or from a different participant — do NOT extract it again
 - Messages in any language follow the same rules
 
 The bar: if a CEO wouldn't track this on a sticky note, don't extract it. When in doubt, do NOT extract. An empty list is better than a noisy one.

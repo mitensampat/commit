@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-07-16T17:28:11+05:30",
+  "threshold": 0.5,
+  "window_days": 30,
+  "total": 2073,
+  "in_chat_dup_items": 39,
+  "cross_chat_dup_items": 20,
+  "in_chat_dup_pairs": 22,
+  "cross_chat_dup_pairs": 12,
+  "example_patterns": [
+    "Call PERSON  ≈  Call PERSON when available",
+    "Call PERSON  ≈  Call back PERSON",
+    "Call back PERSON  ≈  Call PERSON back",
+    "Call with PERSON at 3:30 PERSON  ≈  Call with PERSON",
+    "Chat about big picture stuff on PERSON at 10:30 PERSON  ≈  Chat about big picture stuff on the weekend",
+    "Create PERSON metrics view in PERSON sheet mapped to PERSON goals  ≈  Create PERSON metrics view in PERSON sheet mapped to PERSON goals",
+    "Implement PERSON PERSON PERSON (RPD) for bank verification  ≈  Implement PERSON for bank verification",
+    "Review PERSON PERSON investment memo and confirm allocation  ≈  Review PERSON PERSON investment memo"
+  ],
+  "open_only_total": 382,
+  "open_in_chat_dup_items": 0
+}
