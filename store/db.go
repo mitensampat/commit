@@ -179,6 +179,12 @@ func (db *DB) migrate() error {
 		)`)
 	}
 
+	// Schedule tables (logical v9) are versioned independently — see
+	// store/schedule.go for why this doesn't gate on schema_version.
+	if err := db.migrateSchedule(); err != nil {
+		return err
+	}
+
 	db.setSchemaVersion(7)
 	return nil
 }
