@@ -140,6 +140,15 @@ func (c *Client) Connect(ctx context.Context) error {
 }
 
 func (c *Client) Login(ctx context.Context) (<-chan string, error) {
+	// Never clobber a healthy session: a stray visit to the QR screen used
+	// to replace the paired client with an unpaired one, leaving receiving
+	// alive on the old client and every send broken on the new one.
+	if c.IsConnected() && c.HasSession() {
+		empty := make(chan string)
+		close(empty)
+		return empty, nil
+	}
+
 	container, err := c.getContainer()
 	if err != nil {
 		return nil, fmt.Errorf("get container: %w", err)
@@ -147,11 +156,6 @@ func (c *Client) Login(ctx context.Context) (<-chan string, error) {
 
 	deviceStore := container.NewDevice()
 	client := whatsmeow.NewClient(deviceStore, waLog.Noop)
-
-	c.mu.Lock()
-	c.wa = client
-	c.mu.Unlock()
-
 	client.AddEventHandler(c.handleEvent)
 
 	qrCodes := make(chan string, 5)
@@ -170,13 +174,22 @@ func (c *Client) Login(ctx context.Context) (<-chan string, error) {
 				default:
 				}
 			} else if evt.Event == "success" {
+				// Pairing succeeded — only now does the new client take over.
 				c.mu.Lock()
+				old := c.wa
+				c.wa = client
 				c.connected = true
 				c.mu.Unlock()
+				if old != nil && old != client {
+					old.Disconnect()
+				}
 				c.startLoops(c.appCtx)
 				return
 			}
 		}
+		// QR expired or flow abandoned without pairing — tear the
+		// provisional client down; the previous session (if any) is intact.
+		client.Disconnect()
 	}()
 
 	return qrCodes, nil
