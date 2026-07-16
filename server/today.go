@@ -26,9 +26,13 @@ func (s *Server) handleToday(w http.ResponseWriter, r *http.Request) {
 	snoozed, _ := s.db.GetSnoozedCount()
 	autoClosed, _ := s.db.GetAutoResolvedCountSince(weekAgo)
 	resolvedWeek, _ := s.db.GetResolvedCountSince(weekAgo)
+	// Suggestions, not a queue: show at most 5, highest confidence first.
 	pendingClosures, _ := s.db.GetPendingClosures()
 	if pendingClosures == nil {
 		pendingClosures = []*store.PendingClosure{}
+	}
+	if len(pendingClosures) > 5 {
+		pendingClosures = pendingClosures[:5]
 	}
 
 	writeJSON(w, map[string]any{

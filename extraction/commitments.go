@@ -76,17 +76,30 @@ type ClosureDetection struct {
 }
 
 // Confidence tiers for closure detections.
+//
+// Policy: silent auto-close is reserved for COMPLETED HANDOFFS — the chat
+// shows both delivery by the committer and acknowledgment by the recipient
+// (closure_type "recipient_acknowledgment" at high confidence). Everything
+// else the model detects at moderate confidence — one-sided "I sent it"
+// claims, indirect references, moot-by-events, call-fulfills-commitment —
+// becomes a suggestion the user can confirm or dismiss. Eval basis: on
+// historical auto-closes, judge-graded replay found zero judged-good items
+// in the one-sided mid-confidence band; chat text alone can't justify most
+// silent closes.
 const (
-	autoCloseThreshold = 0.85 // auto-close silently, resolved_by='auto'
-	pendingThreshold   = 0.60 // queue for user confirmation; below this, ignore
+	autoCloseThreshold = 0.85 // floor for the handoff auto-close tier
+	pendingThreshold   = 0.60 // floor for suggestions; below this, ignore
 )
 
+// AutoCloseType is the only closure type allowed to close silently.
+const AutoCloseType = "recipient_acknowledgment"
+
 // legacyConfidence is assigned when the model returns a bare resolved ID with
-// no score — enough to surface for confirmation, never to close silently.
+// no score — enough to surface as a suggestion, never to close silently.
 const legacyConfidence = 0.70
 
 // applyClosureDetections routes each detection into its tier. Returns how
-// many commitments were auto-closed and how many were queued for the user.
+// many commitments were auto-closed and how many became suggestions.
 func (e *Extractor) applyClosureDetections(dets []ClosureDetection, source string) (autoClosed, queued int) {
 	for _, d := range dets {
 		if d.ID == "" {
@@ -99,7 +112,8 @@ func (e *Extractor) applyClosureDetections(dets []ClosureDetection, source strin
 			conf = 1
 		}
 		switch {
-		case conf >= autoCloseThreshold:
+		case conf >= autoCloseThreshold && d.ClosureType == AutoCloseType:
+			// Completed handoff: delivery + recipient acknowledgment.
 			if err := e.db.AutoResolveCommitment(d.ID); err != nil {
 				log.Printf("%s: auto-resolve error for %s: %v", source, d.ID, err)
 				continue
@@ -112,11 +126,11 @@ func (e *Extractor) applyClosureDetections(dets []ClosureDetection, source strin
 				continue
 			}
 			if err := e.db.SavePendingClosure(d.ID, conf, d.Evidence, d.ClosureType); err != nil {
-				log.Printf("%s: save pending closure error for %s: %v", source, d.ID, err)
+				log.Printf("%s: save suggestion error for %s: %v", source, d.ID, err)
 				continue
 			}
 			queued++
-			log.Printf("%s: queued closure of %s for confirmation (%.2f %s)", source, d.ID, conf, d.ClosureType)
+			log.Printf("%s: suggested closure of %s (%.2f %s)", source, d.ID, conf, d.ClosureType)
 		}
 	}
 	return autoClosed, queued
@@ -578,15 +592,14 @@ const closureRubric = `For each open commitment that looks completed or moot, re
 - confidence: 0.0-1.0, your honest probability that this commitment is truly done or no longer needed
 - evidence: ONE short verbatim quote from the messages that best supports the closure (the exact text, not a paraphrase)
 - closure_type: one of
-  - "direct_completion": the person who owes it explicitly says it's done ("sent", "done", "sorted", "paid it") or visibly does it (shares the file/link/doc, "[Voice call]" fulfilling a call promise)
-  - "recipient_acknowledgment": the OTHER party confirms receipt or completion ("got it", "received, thanks", "perfect, see you then")
-  - "context_completion": the conversation implies the action happened without anyone saying so (topic concluded, follow-up discussion assumes it was done)
-  - "moot": plans changed or the commitment is no longer needed
+  - "recipient_acknowledgment": a COMPLETED HANDOFF — the chat shows BOTH the delivery by the person who owes it (the file/link/doc appears, or they explicitly state completion) AND the other party acknowledging it ("got it", "received, thanks", "perfect, see you then"). Both sides must be visible in the messages.
+  - "direct_completion": one-sided — the person who owes it says or shows it's done ("sent", "done", "sorted", shares the file, "[Voice call]" fulfilling a call promise), but the recipient has NOT confirmed.
+  - "context_completion": the conversation implies the action happened without anyone saying so (topic concluded, follow-up discussion assumes it was done).
+  - "moot": plans changed or the commitment is no longer needed.
 
 CONFIDENCE CALIBRATION — be honest, not aggressive:
-- 0.90-1.00: unambiguous. Direct statement of completion or the deliverable itself appears in the chat, clearly matching THIS commitment.
-- 0.85-0.89: very likely done — strong direct or acknowledgment signal, minor ambiguity about which commitment it matches.
-- 0.60-0.84: probably done, but the evidence is indirect: vague confirmations ("ok great", "thanks"), context implying completion, a call that may or may not have covered the topic, or plans that seem to have changed.
+- 0.85-1.00: reserved for completed two-sided handoffs (closure_type "recipient_acknowledgment"): delivery AND recipient acknowledgment both visible, clearly matching THIS commitment. NEVER give a confidence above 0.84 unless the recipient explicitly acknowledged the delivered item — a one-sided claim, however emphatic, caps at 0.84.
+- 0.60-0.84: probably done, but one-sided or indirect: an unacknowledged "sent it", a shared file with no reply, a call that may have covered the topic, context implying completion, or plans that seem to have changed.
 - below 0.60: a hunch. Mere replies, topic changes, pleasantries, or silence are NOT closure evidence.
 
 Never mark high confidence just because the chat moved on. A commitment with no completion signal stays open.`

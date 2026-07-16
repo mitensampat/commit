@@ -32,6 +32,7 @@ import (
 const (
 	autoCloseThreshold = 0.85
 	pendingThreshold   = 0.60
+	autoCloseType      = "recipient_acknowledgment" // only closure type allowed to close silently
 	contextBeforeHours = 72  // messages before resolution shown to the scorer (sweep sees 48h; a little extra for slow chats)
 	judgeAfterHours    = 48  // hindsight messages after resolution shown only to the judge
 	maxContextMessages = 60
@@ -79,8 +80,8 @@ func main() {
 	seed := flag.Int64("seed", 42, "sampling seed")
 	dumpDir := flag.String("dump-prompts", "", "write scorer/judge prompts to this dir and exit (offline mode, no API calls)")
 	collectDir := flag.String("collect", "", "read model responses from this dir (written next to the dumped prompts) and build the report")
-	scorerModelName := flag.String("scorer-model", "", "model label recorded in the report (offline mode)")
-	judgeModelName := flag.String("judge-model", "", "model label recorded in the report (offline mode)")
+	scorerModelName := flag.String("scorer-model", "", "override the scorer model (default: production sweep model)")
+	judgeModelName := flag.String("judge-model", "", "override the judge model (default: the DB's configured model)")
 	flag.Parse()
 
 	if *dbPath == "" {
@@ -119,6 +120,14 @@ func main() {
 
 	scorerModel := store.FallbackModel // production sweep model
 	judgeModel := sdb.GetModel()
+	// Model overrides apply in every mode — the judge especially should be a
+	// stronger model than the scorer, not whatever the DB happens to have.
+	if *scorerModelName != "" {
+		scorerModel = *scorerModelName
+	}
+	if *judgeModelName != "" {
+		judgeModel = *judgeModelName
+	}
 
 	switch {
 	case *dumpDir != "":
@@ -130,12 +139,6 @@ func main() {
 	case *collectDir != "":
 		if err := collectResponses(items, *collectDir); err != nil {
 			log.Fatalf("collect: %v", err)
-		}
-		if *scorerModelName != "" {
-			scorerModel = *scorerModelName
-		}
-		if *judgeModelName != "" {
-			judgeModel = *judgeModelName
 		}
 	default:
 		apiKey := sdb.GetAPIKey()
@@ -475,12 +478,14 @@ func judgeItem(raw *sql.DB, it *sampleItem, apiKey, model string) {
 	parseJudgeResponse(it, resp)
 }
 
+// tier implements the shipped policy: silent auto-close only for completed
+// two-sided handoffs; every other detection at >=0.60 becomes a suggestion.
 func tier(it *sampleItem) string {
 	switch {
-	case it.Detected && it.Confidence >= autoCloseThreshold:
+	case it.Detected && it.Confidence >= autoCloseThreshold && it.ClosureType == autoCloseType:
 		return "auto"
 	case it.Detected && it.Confidence >= pendingThreshold:
-		return "pending"
+		return "suggest"
 	default:
 		return "ignore"
 	}
@@ -506,13 +511,13 @@ func buildReport(items []*sampleItem, poolSize, llmPathLast14, allAutoLast14 int
 
 	// confidence distribution
 	buckets := map[string]int{}
-	bucketOrder := []string{"not flagged", "<0.60", "0.60-0.84", "0.85-0.89", "0.90-1.00"}
+	bucketOrder := []string{"not flagged", "<0.60", "0.60-0.84", "0.85+ one-sided", "0.85+ handoff"}
 	tierCount := map[string]int{}
 	verdicts := map[string]int{}
 	judgeErrs := 0
 
 	type cell struct{ good, bad, unclear int }
-	byTier := map[string]*cell{"auto": {}, "pending": {}, "ignore": {}}
+	byTier := map[string]*cell{"auto": {}, "suggest": {}, "ignore": {}}
 
 	for _, it := range scored {
 		switch {
@@ -522,10 +527,10 @@ func buildReport(items []*sampleItem, poolSize, llmPathLast14, allAutoLast14 int
 			buckets["<0.60"]++
 		case it.Confidence < autoCloseThreshold:
 			buckets["0.60-0.84"]++
-		case it.Confidence < 0.90:
-			buckets["0.85-0.89"]++
+		case it.ClosureType == autoCloseType:
+			buckets["0.85+ handoff"]++
 		default:
-			buckets["0.90-1.00"]++
+			buckets["0.85+ one-sided"]++
 		}
 		t := tier(it)
 		tierCount[t]++
@@ -549,27 +554,43 @@ func buildReport(items []*sampleItem, poolSize, llmPathLast14, allAutoLast14 int
 	unclear := verdicts["unclear"]
 
 	// Key numbers
-	badDemoted := byTier["pending"].bad + byTier["ignore"].bad // judged-bad closes NOT silently auto-closed by new system
-	goodStillAuto := byTier["auto"].good
+	badStillAuto := byTier["auto"].bad // judged-bad closes that would STILL close silently (target ~0)
+	badCaught := byTier["suggest"].bad + byTier["ignore"].bad
 
 	oldPrecisionNum, oldPrecisionDen := good, good+bad
-	newAutoGood := byTier["auto"].good
-	newAutoBad := byTier["auto"].bad
-	newPrecisionDen := newAutoGood + newAutoBad
+	autoGood := byTier["auto"].good
+	autoDen := byTier["auto"].good + byTier["auto"].bad // handoff auto-tier correctness, unclear excluded
 
-	pendingFrac := 0.0
+	suggestFrac := 0.0
 	if nScored > 0 {
-		pendingFrac = float64(tierCount["pending"]) / float64(nScored)
+		suggestFrac = float64(tierCount["suggest"]) / float64(nScored)
 	}
-	pendingPerWeek := float64(llmPathLast14) / 2.0 * pendingFrac
+	suggestPerWeekRaw := float64(llmPathLast14) / 2.0 * suggestFrac
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, `# Auto-Close Eval: Tiered Confidence vs Single Bucket
+	fmt.Fprintf(&sb, `# Auto-Close Eval: Handoff-Only Auto-Close vs Single Bucket
 
 Generated: %s
 Scorer model (production sweep model): %s
 Judge model: %s
 Schema version after opening DB copy: %s (migration v8 applied cleanly)
+
+## Policy under test (final)
+
+- **Silent auto-close only for completed handoffs**: the chat shows BOTH the
+  delivery by the committer AND the recipient acknowledging it
+  (closure_type "recipient_acknowledgment", confidence >= %.2f).
+- **Everything else detected at >= %.2f becomes a suggestion** ("These look
+  done") — one-sided "I sent it" claims, indirect references, moot-by-events,
+  call-fulfills-commitment. The UI shows at most 5, highest confidence first;
+  suggestions expire silently after 7 days (recorded as reason='expired').
+- Below %.2f: ignored. The rule-based staleness sweep is unchanged.
+
+This supersedes the earlier symmetric >= 0.85 / 0.60-0.84 tiers after two
+direct-API reruns showed the 0.60-0.84 band contained zero judged-good items
+and a stronger scorer declined to flag most closes — chat text alone cannot
+justify most silent closes (see REPORT-direct.md, REPORT-sonnet-scorer.md,
+kept as superseded inputs).
 
 ## Methodology
 
@@ -584,10 +605,9 @@ at least %d messages of chat context in the %dh before their resolution
 ("replayable pool"), a seeded random sample of %d was drawn. For each item:
 
 1. **Scorer (new system):** the exact production resolution-sweep prompt
-   (confidence + evidence + closure type rubric) was re-run on the messages
-   the sweep would have seen at resolution time, using the production sweep
-   model. The returned confidence maps to the new tiers:
-   auto-close (>=%.2f), pending confirmation (%.2f-%.2f), ignore (<%.2f).
+   (confidence + evidence + closure-type rubric, handoff-gated calibration)
+   was re-run on the messages the sweep would have seen at resolution time,
+   using the production sweep model. Detections map to the policy above.
    A commitment the scorer does not flag at all counts as "ignore".
 2. **Judge (label):** an independent pass with a stronger model, given %dh of
    additional hindsight messages after the close, graded each historical
@@ -602,14 +622,14 @@ precision.
 - Replayable auto-closed pool: %d (of all auto-closed commitments)
 - Sampled and scored: %d (scorer errors: %d, judge errors treated as unclear: %d)
 
-## Confidence distribution (new scorer, on items the old system closed)
+## Scorer distribution (on items the old system closed)
 
 | Bucket | Count | Share |
 |---|---|---|
 `,
 		time.Now().Format("2006-01-02 15:04 MST"), scorerModel, judgeModel, schemaVersion,
+		autoCloseThreshold, pendingThreshold, pendingThreshold,
 		poolSize, minContextMessages, contextBeforeHours, len(items),
-		autoCloseThreshold, pendingThreshold, autoCloseThreshold, pendingThreshold,
 		judgeAfterHours,
 		poolSize, nScored, scoreErrs, judgeErrs)
 
@@ -618,53 +638,57 @@ precision.
 	}
 
 	fmt.Fprintf(&sb, `
-Tier assignment: auto %s, pending %s, ignore %s.
+Tier assignment under the final policy: auto %s, suggest %s, ignore %s.
 
 ## Judge labels
 
 good %d, bad %d, unclear %d (of %d scored).
 
-## Headline metrics
+## Headline metrics (old vs new)
 
 | Metric | Value |
 |---|---|
-| **Judged-bad auto-closes the new system catches** (demoted to pending or ignored) | **%s** |
-| Judged-good auto-closes still closed automatically (>=%.2f) | %s |
+| **Judged-bad closes that would STILL close silently** (target ~0) | **%s** |
+| Judged-bad closes caught (suggested or left open instead) | %s |
 | Old single-bucket precision (judge-labeled, unclear excluded) | %s |
-| New auto tier precision (judge-labeled, unclear excluded) | %s |
-| Estimated pending confirmations per week | ~%.0f |
+| Two-sided-handoff auto-closes judged correct (new auto tier precision) | %s |
+| Estimated suggestions per week (raw rate) | ~%.0f |
+| Displayed suggestion burden | at most 5 visible at a time; 7-day expiry |
 
 Tier vs judge cross-tab:
 
 | Tier | good | bad | unclear |
 |---|---|---|---|
-| auto (>=%.2f) | %d | %d | %d |
-| pending (%.2f-%.2f) | %d | %d | %d |
+| auto (handoff, >=%.2f) | %d | %d | %d |
+| suggest (>=%.2f, non-handoff or <%.2f) | %d | %d | %d |
 | ignore (<%.2f) | %d | %d | %d |
 
-Pending burden basis: last 14 days had %d auto-closes total, of which %d had
+Suggestion burden basis: last 14 days had %d auto-closes total, of which %d had
 recent chat activity before close (proxy for the LLM-detection path this
 change affects; the remainder are rule-based staleness closes, which keep
-auto-closing directly). %d/2 per week x %.0f%% pending rate = ~%.0f
-confirmations/week.
+auto-closing directly). %d/2 per week x %.0f%% suggest rate = ~%.0f raw
+suggestions/week entering the table. The Today view displays at most 5 at a
+time (highest confidence first) and unactioned rows expire after 7 days, so
+the user-visible review burden is a glance at <= 5 rows regardless of the raw
+rate; the rest expire silently as training data.
 
 ## Interpretation
 
-The judge found the old always-auto-close bucket to be far less precise than
-assumed: most sampled closes had no real completion evidence. The new
-calibrated scorer is much more conservative — it silently auto-closes only
-the clearest cases, routes a small slice to user confirmation, and leaves the
-rest open. Items it now ignores do not pile up forever: they remain subject
-to the unchanged rule-based staleness sweep and normal user actions. The
-trade is deliberate: far fewer wrong silent closes at the cost of less
-automation, with the pending queue keeping the user in the loop on the
-ambiguous middle.
+The judge confirms the old always-auto-close bucket was imprecise: most
+sampled closes had no real completion evidence. Under the final policy, silent
+closing is reserved for the one pattern with two-sided evidence — a delivery
+plus the recipient's acknowledgment — and everything else the model suspects
+is surfaced as a capped, expiring suggestion or simply left open. Items left
+open do not pile up forever: they remain subject to the unchanged rule-based
+staleness sweep and normal user actions.
 
 ## Caveats
 
 - **No human ground truth.** Labels come from a single stronger-model judge
   pass with hindsight context, not from the user. Judge mistakes move both
   headline numbers; "unclear" items (%d) are excluded from precision.
+- **The auto tier is small by design**, so its precision estimate rests on
+  very few judge-labeled items — read it as directional, not exact.
 - **Label circularity risk is limited but real:** scorer and judge share a
   model family, though they use different prompts, different models, and the
   judge sees %dh of extra hindsight the scorer cannot.
@@ -681,17 +705,17 @@ ambiguous middle.
   deliberately NOT included in this committed report (write them locally with
   -details).
 %s`,
-		pct(tierCount["auto"], nScored), pct(tierCount["pending"], nScored), pct(tierCount["ignore"], nScored),
+		pct(tierCount["auto"], nScored), pct(tierCount["suggest"], nScored), pct(tierCount["ignore"], nScored),
 		good, bad, unclear, nScored,
-		pct(badDemoted, bad),
-		autoCloseThreshold, pct(goodStillAuto, good),
+		pct(badStillAuto, bad),
+		pct(badCaught, bad),
 		pct(oldPrecisionNum, oldPrecisionDen),
-		pct(newAutoGood, newPrecisionDen),
-		pendingPerWeek,
+		pct(autoGood, autoDen),
+		suggestPerWeekRaw,
 		autoCloseThreshold, byTier["auto"].good, byTier["auto"].bad, byTier["auto"].unclear,
-		pendingThreshold, autoCloseThreshold, byTier["pending"].good, byTier["pending"].bad, byTier["pending"].unclear,
+		pendingThreshold, autoCloseThreshold, byTier["suggest"].good, byTier["suggest"].bad, byTier["suggest"].unclear,
 		pendingThreshold, byTier["ignore"].good, byTier["ignore"].bad, byTier["ignore"].unclear,
-		allAutoLast14, llmPathLast14, llmPathLast14, 100*pendingFrac, pendingPerWeek,
+		allAutoLast14, llmPathLast14, llmPathLast14, 100*suggestFrac, suggestPerWeekRaw,
 		unclear, judgeAfterHours, nScored, contextBeforeHours, maxContextMessages,
 		executionNote(scorerModel))
 

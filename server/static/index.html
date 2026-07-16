@@ -3298,11 +3298,11 @@
             const trustBits = [];
             if (today.snoozed > 0) trustBits.push(`${today.snoozed} snoozed`);
             if (today.auto_closed_week > 0) trustBits.push(`<a onclick="switchTab('resolved', document.getElementById('tab-resolved'))">Commit auto-closed ${today.auto_closed_week} this week</a>`);
-            if (pendingClosures.length > 0) trustBits.push(`${pendingClosures.length} awaiting your confirmation`);
+            if (pendingClosures.length > 0) trustBits.push(`${pendingClosures.length} look done &mdash; review`);
             if (trustBits.length > 0) html += `<div class="trust-line">${trustBits.join(' &middot; ')}</div>`;
 
             if (pendingClosures.length > 0) {
-                html += '<div class="today-section-label">Closures to confirm</div><div class="attention-section">';
+                html += '<div class="today-section-label">These look done</div><div class="attention-section">';
                 for (const p of pendingClosures) {
                     const person = p.person_name || p.chat_name || '';
                     html += `<div class="commitment-card" id="closure-${escAttr(p.commitment_id)}">

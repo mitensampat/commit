@@ -189,14 +189,17 @@ func (db *DB) migrate() error {
 			closure_type  TEXT NOT NULL DEFAULT '',
 			detected_at   INTEGER NOT NULL
 		)`)
-		// Rejected detections are kept as future training data.
+		// Suggestions that leave the queue without confirming are kept as
+		// future training data; reason distinguishes an explicit user
+		// "keep open" ('rejected') from a silent 7-day expiry ('expired').
 		db.conn.Exec(`CREATE TABLE IF NOT EXISTS closure_rejections (
 			commitment_id TEXT NOT NULL,
 			confidence    REAL NOT NULL DEFAULT 0,
 			evidence      TEXT NOT NULL DEFAULT '',
 			closure_type  TEXT NOT NULL DEFAULT '',
 			detected_at   INTEGER NOT NULL DEFAULT 0,
-			rejected_at   INTEGER NOT NULL
+			rejected_at   INTEGER NOT NULL,
+			reason        TEXT NOT NULL DEFAULT 'rejected'
 		)`)
 	}
 
