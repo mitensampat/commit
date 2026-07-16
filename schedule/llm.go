@@ -20,9 +20,10 @@ type Creds struct {
 }
 
 type claudeRequest struct {
-	Model     string          `json:"model"`
-	MaxTokens int             `json:"max_tokens"`
-	Messages  []claudeMessage `json:"messages"`
+	Model       string          `json:"model"`
+	MaxTokens   int             `json:"max_tokens"`
+	Temperature float64         `json:"temperature"`
+	Messages    []claudeMessage `json:"messages"`
 }
 
 type claudeMessage struct {
@@ -45,9 +46,10 @@ func callClaude(ctx context.Context, apiKey, model, prompt string, maxTokens int
 		return "", fmt.Errorf("API key not configured")
 	}
 	body, err := json.Marshal(claudeRequest{
-		Model:     model,
-		MaxTokens: maxTokens,
-		Messages:  []claudeMessage{{Role: "user", Content: prompt}},
+		Model:       model,
+		MaxTokens:   maxTokens,
+		Temperature: 0, // classification must be deterministic
+		Messages:    []claudeMessage{{Role: "user", Content: prompt}},
 	})
 	if err != nil {
 		return "", err
