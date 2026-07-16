@@ -214,11 +214,14 @@ func (m *Manager) finalizeBooking(ctx context.Context, s *Session, directIndex i
 	}
 
 	// 5. Confirm to the counterpart (only if a proposal round happened).
-	confirm := fmt.Sprintf("Locked in %s — calendar invite is set.", FormatSlotShort(slot, loc))
+	// Casual continuation tone — same register as the proposal.
+	confirm := fmt.Sprintf("sounds good — %s it is.", FormatSlotShort(slot, loc))
 	if meetLink != "" {
-		confirm += " Meet link: " + meetLink
+		confirm += " here's the meet link: " + meetLink + " — it's on the invite too. look forward!"
 	} else if htmlLink != "" {
-		confirm += " Details: " + htmlLink
+		confirm += " here's the calendar invite: " + htmlLink + " — click to add it to your calendar. look forward!"
+	} else {
+		confirm += " look forward!"
 	}
 	if s.Surfaced != nil {
 		if _, err := m.Sender.SendTo(ctx, s.ContactJID, confirm); err != nil {

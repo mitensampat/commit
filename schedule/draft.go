@@ -104,17 +104,19 @@ func GenerateDraft(ctx context.Context, creds Creds, dr DraftRequest) (string, e
 		loc = time.Local
 	}
 	var sb strings.Builder
-	sb.WriteString(`Write a short WhatsApp message from the user to the contact below. Match the user's texting style (see style notes and samples). No signatures, no "Dear", no bullet-point formality unless the samples do that. Keep it natural and brief.
+	sb.WriteString(`Write a short WhatsApp message from the user to the contact below. Match the user's texting style (see style notes and samples). No signatures, no "Dear". Keep it natural and brief.
+
+CRITICAL: this message CONTINUES an ongoing conversation — the contact just asked to meet. Do NOT greet, do NOT reintroduce the idea of meeting ("hey X!", "wanna catch up sometime?"). Reply like the last message in the thread was seconds ago. The shape is simply: a casual lead-in like "here are some slots that could work:", then the times as a numbered list (1., 2., ...) so they can reply with just a number, then a short closer like "let me know which one suits you".
 
 `)
 	if dr.Cancel {
-		sb.WriteString("The message must gracefully cancel their planned meeting")
+		sb.WriteString("Exception for this message: it must gracefully cancel their planned meeting")
 		if dr.BookedWhen != "" {
 			sb.WriteString(" (" + dr.BookedWhen + ")")
 		}
 		sb.WriteString(", apologize briefly, and offer to rebook.\n")
 	} else {
-		sb.WriteString("The message must propose the meeting times below as a numbered list (1., 2., ...) and ask which works. Mention what the meeting is about in passing.\n")
+		sb.WriteString("Only mention what the meeting is about if the thread left it ambiguous — usually they already know.\n")
 		if dr.ContactTZ != "" && dr.ContactTZNote != "" {
 			sb.WriteString("IMPORTANT: The contact may be in a different timezone (" + dr.ContactTZ + ", " + dr.ContactTZNote + "). Give the times in their timezone too, and explicitly state the assumption so they can correct it, e.g. \"that's 8am your side — assuming you're in SF?\".\n")
 		}
