@@ -6,6 +6,8 @@ WhatsApp commitment tracker. Go + whatsmeow + embedded browser UI (server/static
 
 The full release procedure. Run every step, in order — never publish a build that skipped one.
 
+**Evals are not part of this routine.** They are a development-time tool for deciding whether a feature's behaviour is right (see `evals/`), run while building the feature and reported to the user then. Never gate or delay a release on an eval run.
+
 1. **Bump the version** in ALL six places (they must agree):
    - `server/server.go` — `const AppVersion`
    - `scripts/build-mac.sh` — `VERSION`
