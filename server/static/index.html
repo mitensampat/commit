@@ -872,6 +872,37 @@
             border-bottom: 1px dotted var(--ink-faint);
             cursor: pointer;
         }
+        .sched-strip {
+            border: 1px solid var(--line);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        .sched-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 10px 14px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--line);
+            font-size: 13px;
+        }
+        .sched-row:last-child { border-bottom: none; }
+        .sched-name { font-weight: 500; color: var(--ink); }
+        .sched-state { font-size: 12px; color: var(--ink-secondary); }
+        .sched-topic {
+            font-size: 11px;
+            background: var(--surface-sunken);
+            padding: 1px 8px;
+            border-radius: 10px;
+            color: var(--ink-tertiary);
+        }
+        .sched-slots {
+            font-size: 11px;
+            color: var(--ink-faint);
+            font-variant-numeric: tabular-nums;
+        }
         .fav-track-row {
             display: flex;
             gap: 8px;
@@ -2662,6 +2693,8 @@
             <div class="search-hints">
                 <span class="search-hint"><span class="search-hint-cmd">@find</span> Ask anything about your chats</span>
                 <span class="search-hint-sep"></span>
+                <span class="search-hint"><span class="search-hint-cmd">@schedule</span> In your self-chat: "@schedule &lt;name&gt;" finds time with them</span>
+                <span class="search-hint-sep"></span>
                 <span class="search-hint">or just search by person, topic, keyword</span>
             </div>
         </div>
@@ -3095,14 +3128,15 @@
             }
             try {
                 if (currentTab === 'today') {
-                    const [today, favView, stats] = await Promise.all([
+                    const [today, favView, stats, schedSessions] = await Promise.all([
                         api('/api/today'),
                         api('/api/favorites'),
-                        api('/api/commitments/stats')
+                        api('/api/commitments/stats'),
+                        api('/api/schedule/sessions').catch(() => ({sessions: []}))
                     ]);
                     favChats = favView.fav_chats || {};
                     updateStats(stats);
-                    renderTodayView(today, favView, stats);
+                    renderTodayView(today, favView, stats, (schedSessions && schedSessions.sessions) || []);
                     dashboardLoaded = true;
                     return;
                 } else if (currentTab === 'stats') {
@@ -3268,7 +3302,32 @@
             </div>`;
         }
 
-        function renderTodayView(today, favView, stats) {
+        function scheduleStateLabel(s) {
+            switch (s.state) {
+                case 'awaiting_reply': return 'waiting on their pick';
+                case 'drafting': return 'slots ready — say "propose" in your self-chat';
+                case 'confirming': return 'they picked — say "yes" in your self-chat';
+                default: return 'in progress';
+            }
+        }
+
+        function scheduleStripHTML(sessions) {
+            if (!sessions || sessions.length === 0) return '';
+            let html = '<div class="today-section-label">Scheduling</div><div class="sched-strip">';
+            for (const s of sessions) {
+                const slots = (s.proposed_slots || []).join(' / ');
+                html += `<div class="sched-row">
+                    <span class="sched-name">${esc(s.contact_name)}</span>
+                    <span class="sched-state">${esc(scheduleStateLabel(s))}</span>
+                    ${s.topic ? `<span class="sched-topic">${esc(s.topic)}</span>` : ''}
+                    ${slots ? `<span class="sched-slots">${esc(slots)}</span>` : ''}
+                </div>`;
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function renderTodayView(today, favView, stats, schedSessions) {
             const container = document.getElementById('commitments-container');
             const items = today.items || [];
 
@@ -3288,6 +3347,8 @@
             if (today.snoozed > 0) trustBits.push(`${today.snoozed} snoozed`);
             if (today.auto_closed_week > 0) trustBits.push(`<a onclick="switchTab('resolved', document.getElementById('tab-resolved'))">Commit auto-closed ${today.auto_closed_week} this week</a>`);
             if (trustBits.length > 0) html += `<div class="trust-line">${trustBits.join(' &middot; ')}</div>`;
+
+            html += scheduleStripHTML(schedSessions);
 
             const favGroups = (favView && favView.open) || [];
             if (favGroups.length > 0) {
