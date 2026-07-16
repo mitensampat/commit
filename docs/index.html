@@ -1,4 +1,4 @@
-<!-- v1.4.1 -->
+<!-- v1.5.0 -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -272,7 +272,7 @@
 <div class="header">
   <div class="header-left">
     <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C12.4 5.5 14 8 16.5 10C19 11.5 22 11.8 22 12C22 12.2 19 12.5 16.5 14C14 16 12.4 18.5 12 22C11.6 18.5 10 16 7.5 14C5 12.5 2 12.2 2 12C2 11.8 5 11.5 7.5 10C10 8 11.6 5.5 12 2Z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
-    Commit <span class="version">v1.4.1</span>
+    Commit <span class="version">v1.5.0</span>
   </div>
   <div class="clock" id="clock"></div>
 </div>
@@ -288,9 +288,17 @@
 </div>
 
 <div class="section">
+<p><b>scheduling, without the scheduling link</b></p>
+<p>someone asks to meet. instead of sending them a booking link &mdash; which quietly says <i>my time matters more than yours, go find a slot</i> &mdash; you message yourself: <code>@schedule &lt;name&gt;</code>.</p>
+<p>Commit reads the last few messages with them, works out what the meeting is about and how long it needs, checks your real calendar, and writes back three times you're actually free &mdash; drafted in your own texting voice. you say "propose" and it goes to them as an ordinary message from you. they reply "2". you say "yes". it's booked, and they get the invite.</p>
+<p>they never see a link, a bot, or a command. they just see you, replying with times, like a person who checked their calendar for them. two words of yours, start to finish.</p>
+</div>
+
+<div class="section">
 <p><b>features</b></p>
 <ol>
-<li>auto-extraction and auto-resolution of commitments</li>
+<li><code>@schedule &lt;name&gt;</code> &mdash; find time with anyone from your self-chat: reads the thread for context, proposes real free slots in your voice, books it when they pick</li>
+<li>auto-extraction of commitments, with closing you can trust &mdash; Commit only closes something on its own when the chat shows both sides (you delivered, they acknowledged); anything less becomes a quiet "these look done" suggestion you can accept or ignore</li>
 <li>menu bar app (mac) and system tray (windows) &mdash; see at a glance that Commit is running and connected, switch models, check daily stats, start at login</li>
 <li>"act on today" &mdash; the home screen opens with the 3-5 things worth acting on right now: real deadlines, aging promises, conversations going cold</li>
 <li>morning digest &mdash; one WhatsApp message a day with your top items; quiet days send nothing</li>
@@ -300,7 +308,6 @@
 <li><code>@find</code> &mdash; ask anything about your chats from WhatsApp or the dashboard. person-aware search with conversation threading</li>
 <li><code>@commit</code> &mdash; see open commitments in any WhatsApp chat</li>
 <li>context view &mdash; click "Context" on any card to see the original conversation that created it</li>
-<li>smart auto-resolution &mdash; periodic sweep detects when commitments are done, handles stale items and expired deadlines</li>
 <li>bot commands (message yourself: "commitments", "owe @name", "done &lt;text&gt;")</li>
 <li>rename contacts whose WhatsApp names don't match your phonebook</li>
 <li>favorites, search, reminders, dark mode, mobile web</li>
@@ -316,12 +323,12 @@
 
 <div class="section">
 <p><b>requirements</b></p>
-<p>macOS 12+ or Windows 10+. a WhatsApp account. a <a href="https://console.anthropic.com/">Claude API key</a>.</p>
+<p>macOS 12+ or Windows 10+. a WhatsApp account. a <a href="https://console.anthropic.com/">Claude API key</a>. for <code>@schedule</code>, a Google Calendar connection (optional &mdash; everything else works without it).</p>
 </div>
 
 <p><a href="https://github.com/mitensampat/commit/releases/latest" style="font-weight: 600;">download the latest release</a> · <a href="#screens" class="link">see it in action</a></p>
 
-<p class="quiet" style="margin-top: 24px;">brought to you by <a href="https://x.com/miten">MS Foundry</a> &middot; updated 5 Jul 2026</p>
+<p class="quiet" style="margin-top: 24px;">brought to you by <a href="https://x.com/miten">MS Foundry</a> &middot; updated 16 Jul 2026</p>
 
 <div class="screens" id="screens">
 <hr>
