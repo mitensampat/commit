@@ -123,9 +123,12 @@ func StartFlow(clientID, clientSecret string) (*Flow, string, error) {
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
 	go func() {
-		// Whole flow times out after 5 minutes.
-		time.Sleep(5 * time.Minute)
-		f.finish(nil, fmt.Errorf("authorization timed out"))
+		// Generous window: first-time consent involves account picking and
+		// unverified-app warnings, which can easily take more than 5 minutes.
+		// The auth code Google issues is short-lived anyway, so a long
+		// listener lifetime costs nothing.
+		time.Sleep(15 * time.Minute)
+		f.finish(nil, fmt.Errorf("authorization timed out — click Connect again"))
 		srv.Close()
 	}()
 	return f, authURL, nil
