@@ -242,7 +242,7 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 
 func (e *Extractor) extractFromChat(ctx context.Context, apiKey string, msgs []*store.Message, openCommitments []*store.Commitment) (*extractionResult, error) {
 	myStyle := e.db.GetMyStyle()
-	prompt := buildExtractionPrompt(msgs, openCommitments, myStyle)
+	prompt := BuildExtractionPrompt(msgs, openCommitments, myStyle)
 	model := e.db.GetModel()
 	response, err := callClaude(ctx, apiKey, model, prompt)
 	if err != nil {
@@ -266,7 +266,10 @@ func (e *Extractor) extractFromChat(ctx context.Context, apiKey string, msgs []*
 	return &result, nil
 }
 
-func buildExtractionPrompt(msgs []*store.Message, openCommitments []*store.Commitment, myStyle string) string {
+// BuildExtractionPrompt renders the production extraction prompt for a batch
+// of messages. Exported so the eval harness (evals/extraction) can replay
+// message batches through the exact prompt the pipeline uses.
+func BuildExtractionPrompt(msgs []*store.Message, openCommitments []*store.Commitment, myStyle string) string {
 	var sb strings.Builder
 	sb.WriteString(`Analyze these WhatsApp messages. Do two things:
 

@@ -167,31 +167,11 @@ func RankToday(cands []*TodayCandidate, now time.Time, max int) []*TodayItem {
 
 // titleSimilar reports whether two commitment titles describe the same
 // promise, using word-overlap (Jaccard) on lowercased tokens.
+// Display-time threshold is looser (0.4) than the save-time dedupe (0.5)
+// because dropping a near-duplicate from a ranked view is cheap, while
+// refusing to save one is not.
 func titleSimilar(a, b string) bool {
-	ta := tokenSet(a)
-	tb := tokenSet(b)
-	if len(ta) == 0 || len(tb) == 0 {
-		return false
-	}
-	inter := 0
-	for w := range ta {
-		if tb[w] {
-			inter++
-		}
-	}
-	union := len(ta) + len(tb) - inter
-	return float64(inter)/float64(union) >= 0.4
-}
-
-func tokenSet(s string) map[string]bool {
-	out := map[string]bool{}
-	for _, w := range strings.Fields(strings.ToLower(s)) {
-		w = strings.Trim(w, ".,()!?:;\"'")
-		if len(w) > 2 {
-			out[w] = true
-		}
-	}
-	return out
+	return TitlesSimilar(a, b, 0.4)
 }
 
 // shortHint trims a due hint to a badge-sized phrase — extraction sometimes

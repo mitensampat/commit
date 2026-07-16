@@ -103,6 +103,18 @@ func callClaude(ctx context.Context, apiKey, model, prompt string) (string, erro
 	return result.Content[0].Text, nil
 }
 
+// CallClaude is an exported wrapper around the production API caller, used by
+// the eval harness (evals/extraction) so replay and judging go through the
+// same HTTP path as the pipeline.
+func CallClaude(ctx context.Context, apiKey, model, prompt string) (string, error) {
+	return callClaude(ctx, apiKey, model, prompt)
+}
+
+// ExtractJSON exposes the pipeline's JSON extraction for the eval harness.
+func ExtractJSON(s string) string {
+	return extractJSON(s)
+}
+
 // ModelNotFoundError signals that the requested model doesn't exist for this API key.
 type ModelNotFoundError struct {
 	Model string
