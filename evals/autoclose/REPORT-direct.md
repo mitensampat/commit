@@ -1,3 +1,8 @@
+> **SUPERSEDED INPUT — kept for the record.** This report evaluated the
+> earlier symmetric >=0.85 / 0.60-0.84 tier policy and informed the final
+> handoff-only policy. The authoritative eval of the shipped policy is
+> REPORT.md.
+
 # Auto-Close Eval: Tiered Confidence vs Single Bucket
 
 Generated: 2026-07-16 16:59 IST
