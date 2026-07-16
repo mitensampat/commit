@@ -272,3 +272,75 @@ func (db *DB) SetSchedulePrefs(p SchedulePrefs) error {
 	}
 	return db.SetSetting("schedule_prefs", string(data))
 }
+
+// Message helpers for the schedule watcher.
+
+// GetLastNMessagesForChat returns the newest n messages of a chat in
+// ascending time order.
+func (db *DB) GetLastNMessagesForChat(chatJID string, n int) ([]*Message, error) {
+	msgs, err := db.queryMessages(`
+		SELECT id, chat_jid, sender_jid, sender_name, chat_name, content, timestamp, is_from_me, is_group
+		FROM messages WHERE chat_jid = ?
+		ORDER BY timestamp DESC LIMIT ?`, chatJID, n)
+	if err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+	return msgs, nil
+}
+
+// CountMessagesBetween counts messages in a chat with fromUnix <= ts <= toUnix,
+// excluding the given message IDs. Used for consent-scoping ("is this the next
+// self-chat message after Commit's prompt?").
+func (db *DB) CountMessagesBetween(chatJID string, fromUnix, toUnix int64, excludeIDs []string) (int, error) {
+	query := "SELECT COUNT(*) FROM messages WHERE chat_jid = ? AND timestamp >= ? AND timestamp <= ?"
+	args := []interface{}{chatJID, fromUnix, toUnix}
+	for _, id := range excludeIDs {
+		query += " AND id != ?"
+		args = append(args, id)
+	}
+	var n int
+	err := db.conn.QueryRow(query, args...).Scan(&n)
+	return n, err
+}
+
+// GetDirectChats lists 1:1 chats with a best-known display name, for fuzzy
+// contact resolution.
+func (db *DB) GetDirectChats() (map[string]string, error) {
+	out := map[string]string{}
+	rows, err := db.conn.Query(`
+		SELECT chat_jid, chat_name FROM (
+			SELECT chat_jid, chat_name, ROW_NUMBER() OVER (PARTITION BY chat_jid ORDER BY timestamp DESC) rn
+			FROM messages WHERE is_group = 0 AND chat_name != ''
+		) WHERE rn = 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var jid, name string
+		if err := rows.Scan(&jid, &name); err != nil {
+			return nil, err
+		}
+		out[jid] = name
+	}
+	// Contact overrides win.
+	for jid, name := range db.GetContactOverrides() {
+		if name != "" {
+			out[jid] = name
+		}
+	}
+	return out, rows.Err()
+}
+
+// GetLastBookedScheduleSession returns the most recent session for a contact
+// that resulted in a booking (its data blob has booked_event_id set).
+func (db *DB) GetLastBookedScheduleSession(contactJID string) (*ScheduleSessionRow, error) {
+	row := db.conn.QueryRow(
+		"SELECT "+scheduleSessionCols+` FROM schedule_sessions
+		 WHERE contact_jid = ? AND data LIKE '%"booked_event_id"%'
+		 ORDER BY updated_at DESC LIMIT 1`, contactJID)
+	return db.scanScheduleSession(row)
+}

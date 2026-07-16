@@ -2725,6 +2725,69 @@
                     </select>
                 </div>
             </div>
+            <!-- ══════ Scheduling (@schedule) — additive section ══════ -->
+            <div class="settings-group" id="schedule-settings-group">
+                <div class="settings-group-title">Scheduling</div>
+                <div class="settings-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <span class="settings-row-label">Google Calendar</span>
+                    <div style="font-size: 11px; color: var(--ink-tertiary); line-height: 1.5;">Powers <code style="background: var(--surface-sunken); padding: 1px 6px; border-radius: 3px; font-size: 11px;">@schedule &lt;name&gt;</code> from your WhatsApp self-chat. Paste OAuth client credentials from Google Cloud Console (Desktop app type, Calendar API enabled).</div>
+                    <input type="text" id="sched-client-id" placeholder="Google client ID" style="width: 100%; font-size: 12px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-sunken); color: var(--ink); font-family: inherit;" />
+                    <input type="password" id="sched-client-secret" placeholder="Google client secret" style="width: 100%; font-size: 12px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-sunken); color: var(--ink); font-family: inherit;" />
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button class="topbar-btn" onclick="saveScheduleCreds()" style="padding: 5px 10px;">Save credentials</button>
+                        <button class="topbar-btn" id="sched-connect-btn" onclick="connectGoogleCalendar()" style="padding: 5px 10px;">Connect</button>
+                        <span id="sched-conn-status" style="font-size: 11px; color: var(--ink-faint);"></span>
+                    </div>
+                    <div id="sched-msg" style="font-size: 11px; display: none;"></div>
+                </div>
+                <div class="settings-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <span class="settings-row-label">Calendars used for availability</span>
+                    <div id="sched-calendars" style="font-size: 12px; color: var(--ink-tertiary); line-height: 1.8;">Connect Google Calendar to pick.</div>
+                </div>
+                <div class="settings-row">
+                    <span class="settings-row-label">Meeting hours</span>
+                    <div style="display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink-tertiary);">
+                        <input type="time" id="sched-day-start" value="09:00" style="font-size: 12px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-sunken); color: var(--ink); font-family: inherit;" />
+                        to
+                        <input type="time" id="sched-day-end" value="18:00" style="font-size: 12px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-sunken); color: var(--ink); font-family: inherit;" />
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <span class="settings-row-label">Workdays</span>
+                    <div id="sched-workdays" style="display: flex; gap: 4px;"></div>
+                </div>
+                <div class="settings-row">
+                    <span class="settings-row-label">Default duration</span>
+                    <select id="sched-default-dur" style="font-size: 12px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-sunken); color: var(--ink); font-family: inherit;">
+                        <option value="15">15 min</option>
+                        <option value="30" selected>30 min</option>
+                        <option value="45">45 min</option>
+                        <option value="60">60 min</option>
+                    </select>
+                </div>
+                <div class="settings-row">
+                    <span class="settings-row-label">Travel buffer (in-person)</span>
+                    <select id="sched-buffer" style="font-size: 12px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-sunken); color: var(--ink); font-family: inherit;">
+                        <option value="0">none</option>
+                        <option value="15">15 min</option>
+                        <option value="30" selected>30 min</option>
+                        <option value="45">45 min</option>
+                        <option value="60">60 min</option>
+                    </select>
+                </div>
+                <div class="settings-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <span class="settings-row-label">Ignore events titled (comma-separated)</span>
+                    <input type="text" id="sched-ignore-titles" placeholder="block, hold" style="width: 100%; font-size: 12px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-sunken); color: var(--ink); font-family: inherit;" />
+                </div>
+                <div class="settings-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <span class="settings-row-label">Protected rules</span>
+                    <textarea id="sched-protected" placeholder="e.g. no meetings before 10am on Fridays; keep Wednesday afternoons free" style="width: 100%; min-height: 50px; border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 12px; font-family: inherit; color: var(--ink); background: var(--surface-sunken); resize: vertical; line-height: 1.5;"></textarea>
+                </div>
+                <div class="settings-row" style="justify-content: flex-end;">
+                    <button class="topbar-btn" onclick="saveSchedulePrefs()" style="padding: 5px 10px;">Save scheduling settings</button>
+                </div>
+            </div>
+            <!-- ══════ end Scheduling section ══════ -->
             <div class="settings-group">
                 <div class="settings-group-title">API Key</div>
                 <div class="settings-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
@@ -4709,6 +4772,177 @@
 
         // ── Boot ──
         init();
+
+        // ══════ Scheduling (@schedule) settings — additive block ══════
+        let schedPrefs = null;
+        const SCHED_DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+        function schedMinToTime(min) {
+            const h = String(Math.floor(min / 60)).padStart(2, '0');
+            const m = String(min % 60).padStart(2, '0');
+            return h + ':' + m;
+        }
+        function schedTimeToMin(v) {
+            const [h, m] = (v || '0:0').split(':').map(Number);
+            return h * 60 + m;
+        }
+
+        async function loadScheduleSettings() {
+            try {
+                const d = await api('/api/schedule/settings');
+                schedPrefs = d;
+                document.getElementById('sched-client-id').value = d.google_client_id || '';
+                document.getElementById('sched-client-secret').placeholder = d.has_secret ? '••••••••  (set — paste to replace)' : 'Google client secret';
+                document.getElementById('sched-day-start').value = schedMinToTime(d.day_start_min || 540);
+                document.getElementById('sched-day-end').value = schedMinToTime(d.day_end_min || 1080);
+                document.getElementById('sched-default-dur').value = String(d.default_dur_min || 30);
+                document.getElementById('sched-buffer').value = String(d.travel_buffer_min || 0);
+                document.getElementById('sched-ignore-titles').value = (d.ignore_titles || []).join(', ');
+                document.getElementById('sched-protected').value = d.protected_rules || '';
+                renderSchedWorkdays(d.workdays || [1,2,3,4,5]);
+                renderSchedConnStatus(d.connected);
+                if (d.connected) loadSchedCalendars();
+            } catch (e) { /* schedule settings unavailable */ }
+        }
+
+        function renderSchedConnStatus(connected) {
+            const el = document.getElementById('sched-conn-status');
+            const btn = document.getElementById('sched-connect-btn');
+            if (!el) return;
+            if (connected) {
+                el.textContent = 'Connected';
+                el.style.color = 'var(--ink-secondary)';
+                btn.textContent = 'Reconnect';
+            } else {
+                el.textContent = 'Not connected';
+                btn.textContent = 'Connect';
+            }
+        }
+
+        function renderSchedWorkdays(selected) {
+            const wrap = document.getElementById('sched-workdays');
+            if (!wrap) return;
+            wrap.innerHTML = '';
+            for (let i = 0; i < 7; i++) {
+                const b = document.createElement('button');
+                b.textContent = SCHED_DAYS[i];
+                b.dataset.day = i;
+                b.className = 'topbar-btn';
+                b.style.cssText = 'padding:3px 7px;font-size:11px;' + (selected.includes(i) ? 'background:var(--ink);color:var(--surface);' : '');
+                b.onclick = () => {
+                    const on = b.style.background !== '';
+                    b.style.cssText = 'padding:3px 7px;font-size:11px;' + (on ? '' : 'background:var(--ink);color:var(--surface);');
+                };
+                wrap.appendChild(b);
+            }
+        }
+
+        function schedMsg(text, ok) {
+            const el = document.getElementById('sched-msg');
+            el.style.display = 'block';
+            el.style.color = ok ? 'var(--ink-secondary)' : 'var(--danger)';
+            el.textContent = text;
+        }
+
+        async function saveScheduleCreds() {
+            const body = Object.assign({}, schedPrefsFromForm(), {
+                google_client_id: document.getElementById('sched-client-id').value.trim(),
+            });
+            const secret = document.getElementById('sched-client-secret').value.trim();
+            if (secret) body.google_client_secret = secret;
+            try {
+                await api('/api/schedule/settings', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+                document.getElementById('sched-client-secret').value = '';
+                schedMsg('Credentials saved.', true);
+                loadScheduleSettings();
+            } catch (e) { schedMsg('Save failed: ' + e.message, false); }
+        }
+
+        function schedPrefsFromForm() {
+            const workdays = [];
+            document.querySelectorAll('#sched-workdays button').forEach(b => {
+                if (b.style.background !== '') workdays.push(parseInt(b.dataset.day));
+            });
+            return {
+                calendars: (schedPrefs && schedPrefs.calendars) || [],
+                day_start_min: schedTimeToMin(document.getElementById('sched-day-start').value),
+                day_end_min: schedTimeToMin(document.getElementById('sched-day-end').value),
+                workdays: workdays,
+                travel_buffer_min: parseInt(document.getElementById('sched-buffer').value),
+                default_dur_min: parseInt(document.getElementById('sched-default-dur').value),
+                ignore_titles: document.getElementById('sched-ignore-titles').value.split(',').map(s => s.trim()).filter(Boolean),
+                protected_rules: document.getElementById('sched-protected').value.trim(),
+                timezone: (schedPrefs && schedPrefs.timezone) || '',
+            };
+        }
+
+        async function saveSchedulePrefs() {
+            try {
+                await api('/api/schedule/settings', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(schedPrefsFromForm()) });
+                schedMsg('Scheduling settings saved.', true);
+            } catch (e) { schedMsg('Save failed: ' + e.message, false); }
+        }
+
+        async function connectGoogleCalendar() {
+            try {
+                const d = await api('/api/schedule/oauth/start', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
+                window.open(d.auth_url, '_blank');
+                schedMsg('Approve access in the tab that just opened…', true);
+                pollSchedOAuth(0);
+            } catch (e) { schedMsg('Could not start: ' + e.message, false); }
+        }
+
+        async function pollSchedOAuth(n) {
+            if (n > 100) { schedMsg('Authorization timed out.', false); return; }
+            try {
+                const d = await api('/api/schedule/oauth/status');
+                if (d.connected && !d.pending) {
+                    renderSchedConnStatus(true);
+                    schedMsg('Google Calendar connected.', true);
+                    loadSchedCalendars();
+                    return;
+                }
+                if (d.error) { schedMsg('Authorization failed: ' + d.error, false); return; }
+            } catch (e) {}
+            setTimeout(() => pollSchedOAuth(n + 1), 3000);
+        }
+
+        async function loadSchedCalendars() {
+            const wrap = document.getElementById('sched-calendars');
+            try {
+                const d = await api('/api/schedule/calendars');
+                const selected = (schedPrefs && schedPrefs.calendars) || [];
+                wrap.innerHTML = '';
+                (d.calendars || []).forEach(c => {
+                    const label = document.createElement('label');
+                    label.style.cssText = 'display:flex;gap:6px;align-items:center;cursor:pointer;';
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = c.id;
+                    cb.checked = selected.includes(c.id) || (selected.length === 0 && c.primary);
+                    cb.onchange = () => {
+                        const ids = [];
+                        wrap.querySelectorAll('input:checked').forEach(i => ids.push(i.value));
+                        schedPrefs.calendars = ids;
+                        saveSchedulePrefs();
+                    };
+                    label.appendChild(cb);
+                    label.appendChild(document.createTextNode(c.summary + (c.primary ? ' (primary)' : '')));
+                    wrap.appendChild(label);
+                });
+                if (!wrap.hasChildNodes()) wrap.textContent = 'No writable calendars found.';
+            } catch (e) { wrap.textContent = 'Could not load calendars: ' + e.message; }
+        }
+
+        // Load scheduling settings whenever Settings opens (additive wrap).
+        (function () {
+            const orig = openSettings;
+            openSettings = function () {
+                orig();
+                loadScheduleSettings();
+            };
+        })();
+        // ══════ end Scheduling settings block ══════
     </script>
 </body>
 </html>

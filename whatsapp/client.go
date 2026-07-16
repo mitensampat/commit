@@ -18,6 +18,7 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 
+	"github.com/msfoundry/commit/schedule"
 	"github.com/msfoundry/commit/store"
 
 	_ "modernc.org/sqlite"
@@ -48,6 +49,8 @@ type Client struct {
 
 	pendingMu      sync.Mutex
 	pendingChoices []string // person names awaiting disambiguation
+
+	scheduler *schedule.Manager // @schedule sessions (nil until InitScheduler)
 }
 
 func New(db *store.DB, dataDir string, extractor Extractor, appCtx context.Context) *Client {
@@ -278,6 +281,8 @@ func (c *Client) handleMessage(evt *events.Message) {
 
 	if err := c.db.SaveMessage(msg); err != nil {
 		log.Printf("save message error: %v", err)
+	} else {
+		c.notifyScheduleWatcher(msg)
 	}
 }
 
@@ -427,6 +432,7 @@ func (c *Client) startLoops(ctx context.Context) {
 	go c.extractor.StartResolutionLoop(ctx)
 	go c.reminderLoop(ctx)
 	go c.morningDigestLoop(ctx)
+	go c.scheduleExpiryLoop(ctx)
 }
 
 func (c *Client) getContainer() (*sqlstore.Container, error) {

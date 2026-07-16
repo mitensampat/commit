@@ -94,6 +94,22 @@ type Session struct {
 	BookedEventID string    `json:"booked_event_id,omitempty"`
 	BookedSlot    *Slot     `json:"booked_slot,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
+
+	// Candidates — pending contact disambiguation choices (StateResolving).
+	Candidates []ContactCandidate `json:"candidates,omitempty"`
+	// Cmd — the original parsed command, kept while resolving.
+	Cmd *Command `json:"cmd,omitempty"`
+	// LastPromptID — WhatsApp message ID of Commit's last self-chat prompt
+	// (adjacency check for consent scoping).
+	LastPromptID string `json:"last_prompt_id,omitempty"`
+	// OldEventID — for @schedule move: the event to delete once rebooked.
+	OldEventID string `json:"old_event_id,omitempty"`
+}
+
+// ContactCandidate is one fuzzy-match option during contact resolution.
+type ContactCandidate struct {
+	JID  string `json:"jid"`
+	Name string `json:"name"`
 }
 
 // Consent scoping and idempotency windows (hardening reqs 3 and 6).

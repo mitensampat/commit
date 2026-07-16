@@ -62,6 +62,7 @@ func main() {
 
 	wa := whatsapp.New(db, dataDir, extractor, ctx)
 	wa.SetFindHandler(extractor)
+	wa.InitScheduler(db)
 	extractor.SetNotifier(wa)
 	srv := server.New(db, wa, extractor, defaultPort)
 
