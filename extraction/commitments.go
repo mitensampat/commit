@@ -631,6 +631,21 @@ Open commitments:
 	return sb.String()
 }
 
+// Exported hooks for the offline eval harness (evals/autoclose), which
+// replays historical auto-closes with the exact production prompt and parse.
+
+func BuildResolutionPrompt(msgs []*store.Message, commitments []*store.Commitment) string {
+	return buildResolutionPrompt(msgs, commitments)
+}
+
+func CallClaude(ctx context.Context, apiKey, model, prompt string) (string, error) {
+	return callClaude(ctx, apiKey, model, prompt)
+}
+
+func ExtractJSON(s string) string {
+	return extractJSON(s)
+}
+
 func groupMessagesByChat(msgs []*store.Message) map[string][]*store.Message {
 	grouped := make(map[string][]*store.Message)
 	for _, m := range msgs {
