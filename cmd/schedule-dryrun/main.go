@@ -65,11 +65,23 @@ type fakeCalendar struct {
 
 func (f *fakeCalendar) Connected() bool { return true }
 
-func (f *fakeCalendar) ComputeSlots(ctx context.Context, from, to time.Time, dur time.Duration, inPerson bool) ([]schedule.Slot, error) {
+func (f *fakeCalendar) ComputeSlots(ctx context.Context, from, to time.Time, dur time.Duration, inPerson bool, days []time.Weekday) ([]schedule.Slot, error) {
 	prefs := calendar.Prefs{
 		DayStartMin: 9 * 60, DayEndMin: 18 * 60,
 		Workdays: map[time.Weekday]bool{time.Monday: true, time.Tuesday: true, time.Wednesday: true, time.Thursday: true, time.Friday: true},
 		Location: f.loc,
+	}
+	if len(days) > 0 {
+		narrowed := map[time.Weekday]bool{}
+		for _, d := range days {
+			if prefs.Workdays[d] {
+				narrowed[d] = true
+			}
+		}
+		if len(narrowed) == 0 {
+			return nil, nil
+		}
+		prefs.Workdays = narrowed
 	}
 	raw := calendar.ComputeSlots(f.busy, from, to, dur, prefs, 3)
 	var out []schedule.Slot

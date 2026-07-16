@@ -60,6 +60,11 @@ type Session struct {
 	DurationMin int   `json:"duration_min"`
 	Format     string `json:"format"` // "call", "video", "in-person"
 	Window     string `json:"window"` // freeform, e.g. "this week"
+	// RequestedDays are the weekdays the counterpart asked for ("Tue/Wed");
+	// PreferenceMet is false when nothing was free on them and we're
+	// proposing other days instead.
+	RequestedDays string `json:"requested_days,omitempty"`
+	PreferenceMet bool   `json:"preference_met"`
 
 	Slots []Slot `json:"slots"` // currently pickable options, 1-based in user-facing text
 	Draft string `json:"draft"` // message to send to the counterpart

@@ -252,54 +252,123 @@ func (m *Manager) handleCommand(ctx context.Context, rest string, ts time.Time) 
 }
 
 // resolveContacts fuzzy-matches a name against known 1:1 chats.
+// resolveContacts finds chats matching the typed name. Users type the name
+// they see in WhatsApp (their address book — "Allish Jain"), while the chat's
+// own metadata may only carry a push name ("Allish"), so every known name for
+// a contact is considered. Only the best-scoring band is returned: a clear
+// winner resolves, a tie asks (hardening req 1 — never guess).
 func (m *Manager) resolveContacts(name string) []ContactCandidate {
 	chats, err := m.DB.GetDirectChats()
 	if err != nil {
 		return nil
 	}
-	q := strings.ToLower(strings.TrimSpace(name))
-	var out []ContactCandidate
+	q := normalizeQuery(name)
+	if q == "" {
+		return nil
+	}
+
+	type scored struct {
+		ContactCandidate
+		score int
+	}
+	var all []scored
 	seen := map[string]bool{}
+
 	for jid, display := range chats {
 		if strings.HasSuffix(jid, "@g.us") || strings.Contains(jid, "@broadcast") {
 			continue
 		}
-		if fuzzyNameMatch(q, display) {
-			key := strings.ToLower(display)
-			if !seen[key] {
-				seen[key] = true
-				out = append(out, ContactCandidate{JID: jid, Name: display})
+		// Every name this identity is known by: chat display + synced
+		// address-book names.
+		candidates := []string{display}
+		known := m.DB.GetContactNames(jid)
+		candidates = append(candidates, known.Names()...)
+
+		best, bestName := 0, display
+		for _, cand := range candidates {
+			if s := nameMatchScore(q, cand); s > best {
+				best, bestName = s, cand
 			}
+		}
+		if best == 0 {
+			continue
+		}
+		// Prefer the fullest known name for display, not whatever matched.
+		if full := known.Best(); full != "" && len(full) > len(bestName) {
+			bestName = full
+		}
+		if seen[jid] {
+			continue
+		}
+		seen[jid] = true
+		all = append(all, scored{ContactCandidate{JID: jid, Name: bestName}, best})
+	}
+	if len(all) == 0 {
+		return nil
+	}
+
+	// Keep only the strongest band — "Allish Jain" shouldn't drag in every
+	// weak partial match once an exact-ish one exists.
+	top := 0
+	for _, s := range all {
+		if s.score > top {
+			top = s.score
+		}
+	}
+	var out []ContactCandidate
+	dedup := map[string]bool{}
+	for _, s := range all {
+		if s.score != top {
+			continue
+		}
+		if k := strings.ToLower(s.Name); !dedup[k] {
+			dedup[k] = true
+			out = append(out, s.ContactCandidate)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
-// fuzzyNameMatch: every query word must prefix-match some target word, or the
-// query is a substring of the target.
-func fuzzyNameMatch(query, target string) bool {
-	if query == "" || target == "" {
-		return false
+// normalizeQuery lowercases and collapses whitespace so "  KUNAL   shah "
+// and "kunal shah" are the same query.
+func normalizeQuery(s string) string {
+	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
+}
+
+// nameMatchScore rates how well a typed name matches a known one. 0 = no
+// match. Higher bands beat lower ones outright, so a full-name hit wins over
+// incidental first-name overlap with other contacts.
+func nameMatchScore(query, target string) int {
+	t := strings.ToLower(strings.TrimSpace(target))
+	if query == "" || t == "" {
+		return 0
 	}
-	t := strings.ToLower(target)
-	if strings.Contains(t, query) {
-		return true
+	switch {
+	case t == query:
+		return 100
+	// "allish jain" typed, "allish" known (or the reverse): same person.
+	case strings.Contains(t, query), strings.Contains(query, t):
+		return 90
 	}
-	targetWords := strings.Fields(t)
-	for _, qw := range strings.Fields(query) {
-		ok := false
-		for _, tw := range targetWords {
-			if strings.HasPrefix(tw, qw) {
-				ok = true
+	qWords, tWords := strings.Fields(query), strings.Fields(t)
+	matched := 0
+	for _, qw := range qWords {
+		for _, tw := range tWords {
+			if strings.HasPrefix(tw, qw) || strings.HasPrefix(qw, tw) {
+				matched++
 				break
 			}
 		}
-		if !ok {
-			return false
-		}
 	}
-	return true
+	switch {
+	case matched == 0:
+		return 0
+	case matched == len(qWords):
+		return 70 // every word the user typed landed
+	default:
+		return 40 + matched // partial overlap — a candidate worth asking about
+	}
 }
 
 // startSession runs the full command flow for a resolved contact.
@@ -369,11 +438,27 @@ func (m *Manager) startSession(ctx context.Context, cmd *Command, contact Contac
 		from = now
 	}
 	dur := time.Duration(s.DurationMin) * time.Minute
-	slots, err := m.Cal.ComputeSlots(ctx, from, to, dur, s.Format == "in-person")
+
+	// Honor the days they actually asked for. If nothing is free on those
+	// days, fall back to the rest of the window — but never silently: both
+	// the user and the draft have to acknowledge the miss.
+	prefDays := PreferredDays(s.Window)
+	inPerson := s.Format == "in-person"
+	slots, err := m.Cal.ComputeSlots(ctx, from, to, dur, inPerson, prefDays)
 	if err != nil {
 		// OAuth failures must be loud (req 7).
 		m.sendSelfPlain(ctx, "Calendar error: "+err.Error())
 		return
+	}
+	s.RequestedDays = FormatDays(prefDays)
+	s.PreferenceMet = true
+	if len(slots) == 0 && len(prefDays) > 0 {
+		s.PreferenceMet = false
+		slots, err = m.Cal.ComputeSlots(ctx, from, to, dur, inPerson, nil)
+		if err != nil {
+			m.sendSelfPlain(ctx, "Calendar error: "+err.Error())
+			return
+		}
 	}
 	if len(slots) == 0 {
 		m.sendSelfPlain(ctx, fmt.Sprintf("No free slots for %s in that window (%s → %s). Try a different window?",
@@ -393,6 +478,8 @@ func (m *Manager) startSession(ctx context.Context, cmd *Command, contact Contac
 		ContactTZ:     differentTZOnly(s.ContactTZ, loc),
 		ContactTZNote: s.ContactTZNote,
 		StyleSamples:  m.styleSamples(contact.JID),
+		RequestedDays: s.RequestedDays,
+		PreferenceMet: s.PreferenceMet,
 	})
 	if err != nil {
 		m.sendSelfPlain(ctx, "Couldn't draft the message (Claude error): "+err.Error())
@@ -412,6 +499,10 @@ func (m *Manager) startSession(ctx context.Context, cmd *Command, contact Contac
 	}
 	if s.ContactTZ != "" && s.ContactTZ != loc.String() {
 		sb.WriteString(fmt.Sprintf("\n(their timezone: %s — %s)", s.ContactTZ, s.ContactTZNote))
+	}
+	if !s.PreferenceMet && s.RequestedDays != "" {
+		sb.WriteString(fmt.Sprintf("\n\n⚠️ %s asked for %s — you have nothing free on those days. Closest alternatives below; the draft says so.",
+			s.ContactName, s.RequestedDays))
 	}
 	sb.WriteString("\n\nFree options:\n")
 	sb.WriteString(FormatSlotList(s.Slots, loc))

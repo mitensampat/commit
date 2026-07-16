@@ -73,3 +73,44 @@ func WindowRange(window string, now time.Time, loc *time.Location) (time.Time, t
 	// Default: tomorrow through +7 days.
 	return startOfDay(n).AddDate(0, 0, 1), startOfDay(n).AddDate(0, 0, 8)
 }
+
+// weekdayWords maps every spelling we accept to a weekday.
+var weekdayWords = map[string]time.Weekday{
+	"mon": time.Monday, "monday": time.Monday, "mondays": time.Monday,
+	"tue": time.Tuesday, "tues": time.Tuesday, "tuesday": time.Tuesday, "tuesdays": time.Tuesday,
+	"wed": time.Wednesday, "weds": time.Wednesday, "wednesday": time.Wednesday, "wednesdays": time.Wednesday,
+	"thu": time.Thursday, "thur": time.Thursday, "thurs": time.Thursday, "thursday": time.Thursday, "thursdays": time.Thursday,
+	"fri": time.Friday, "friday": time.Friday, "fridays": time.Friday,
+	"sat": time.Saturday, "saturday": time.Saturday, "saturdays": time.Saturday,
+	"sun": time.Sunday, "sunday": time.Sunday, "sundays": time.Sunday,
+}
+
+// PreferredDays pulls specific weekdays out of a window phrase — the counterpart
+// saying "next week, Tues/Wed preferred" means the date range is next week AND
+// only two days of it are wanted. Returns nil when no day is named.
+func PreferredDays(window string) []time.Weekday {
+	w := strings.ToLower(window)
+	// Split on anything that isn't a letter so "tues/wed", "tue or wed" and
+	// "tuesday, wednesday" all work.
+	fields := strings.FieldsFunc(w, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z')
+	})
+	seen := map[time.Weekday]bool{}
+	var out []time.Weekday
+	for _, f := range fields {
+		if wd, ok := weekdayWords[f]; ok && !seen[wd] {
+			seen[wd] = true
+			out = append(out, wd)
+		}
+	}
+	return out
+}
+
+// FormatDays renders weekdays the way a person would say them: "Tue/Wed".
+func FormatDays(days []time.Weekday) string {
+	var parts []string
+	for _, d := range days {
+		parts = append(parts, d.String()[:3])
+	}
+	return strings.Join(parts, "/")
+}

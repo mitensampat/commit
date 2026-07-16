@@ -488,6 +488,7 @@ func (c *Client) startLoops(ctx context.Context) {
 	go c.extractor.StartResolutionLoop(ctx)
 	go c.reminderLoop(ctx)
 	go c.morningDigestLoop(ctx)
+	go c.contactSyncLoop(ctx)
 	go c.scheduleExpiryLoop(ctx)
 }
 

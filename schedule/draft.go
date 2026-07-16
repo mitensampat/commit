@@ -80,6 +80,8 @@ type DraftRequest struct {
 	StyleSamples  []string       // recent outbound messages, texting-style reference
 	Cancel        bool           // graceful cancellation note instead of proposal
 	BookedWhen    string         // for cancel/move notes
+	RequestedDays string         // days they asked for, e.g. "Tue/Wed"
+	PreferenceMet bool           // false when we're offering days they didn't ask for
 }
 
 // SelectedSlots resolves the Indices subset.
@@ -117,6 +119,9 @@ CRITICAL: this message CONTINUES an ongoing conversation — the contact just as
 		sb.WriteString(", apologize briefly, and offer to rebook.\n")
 	} else {
 		sb.WriteString("Only mention what the meeting is about if the thread left it ambiguous — usually they already know.\n")
+		if !dr.PreferenceMet && dr.RequestedDays != "" {
+			sb.WriteString("IMPORTANT: they asked for " + dr.RequestedDays + ", but the user is fully booked on those days. The message MUST acknowledge what they asked for, say plainly that those days don't work, and offer the times below as the alternative — apologetic but not grovelling, e.g. \"" + dr.RequestedDays + " are packed for me unfortunately — could any of these work instead?\". Do not pretend these are the days they wanted.\n")
+		}
 		if dr.ContactTZ != "" && dr.ContactTZNote != "" {
 			sb.WriteString("IMPORTANT: The contact may be in a different timezone (" + dr.ContactTZ + ", " + dr.ContactTZNote + "). Give the times in their timezone too, and explicitly state the assumption so they can correct it, e.g. \"that's 8am your side — assuming you're in SF?\".\n")
 		}

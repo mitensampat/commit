@@ -14,8 +14,11 @@ import (
 // implementation wraps the Google client; the dry-run uses a fake.
 type CalendarService interface {
 	Connected() bool
-	// ComputeSlots proposes options between from and to.
-	ComputeSlots(ctx context.Context, from, to time.Time, dur time.Duration, inPerson bool) ([]Slot, error)
+	// ComputeSlots proposes options between from and to. When days is
+	// non-empty, only those weekdays are considered (the counterpart asked
+	// for specific days); an empty result then means the preference can't be
+	// met, which the caller must surface rather than silently ignore.
+	ComputeSlots(ctx context.Context, from, to time.Time, dur time.Duration, inPerson bool, days []time.Weekday) ([]Slot, error)
 	// VerifyFree re-checks one window right before proposing/booking it.
 	VerifyFree(ctx context.Context, start, end time.Time) (bool, error)
 	// Book creates the event (with a Meet link for non-in-person meetings).
@@ -115,13 +118,28 @@ func (g *GoogleCalendarService) calPrefs(inPerson bool) calendar.Prefs {
 	return prefs
 }
 
-func (g *GoogleCalendarService) ComputeSlots(ctx context.Context, from, to time.Time, dur time.Duration, inPerson bool) ([]Slot, error) {
+func (g *GoogleCalendarService) ComputeSlots(ctx context.Context, from, to time.Time, dur time.Duration, inPerson bool, days []time.Weekday) ([]Slot, error) {
 	p := g.DB.GetSchedulePrefs()
 	busy, err := g.Client.BusyAcross(ctx, g.calendarIDs(), from, to, g.location(), p.IgnoreTitles)
 	if err != nil {
 		return nil, err
 	}
-	raw := calendar.ComputeSlots(busy, from, to, dur, g.calPrefs(inPerson), 3)
+	prefs := g.calPrefs(inPerson)
+	// Requested days narrow the search — but only within the user's own
+	// workdays, so "Sat preferred" can't override a no-weekends setting.
+	if len(days) > 0 {
+		narrowed := map[time.Weekday]bool{}
+		for _, d := range days {
+			if len(prefs.Workdays) == 0 || prefs.Workdays[d] {
+				narrowed[d] = true
+			}
+		}
+		if len(narrowed) == 0 {
+			return nil, nil // preference impossible; caller falls back
+		}
+		prefs.Workdays = narrowed
+	}
+	raw := calendar.ComputeSlots(busy, from, to, dur, prefs, 3)
 	var out []Slot
 	for _, s := range raw {
 		out = append(out, Slot{Start: s.Start, End: s.End, Origin: "computed"})

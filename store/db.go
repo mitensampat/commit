@@ -203,13 +203,28 @@ func (db *DB) migrate() error {
 		)`)
 	}
 
+	if version < 9 {
+		// Address-book names synced from WhatsApp's contact store. WhatsApp
+		// shows the user their phonebook name ("Allish Jain") while message
+		// metadata only carries the push name ("Allish") — users type what
+		// they see, so we need both. Rows exist per identity (phone JID and
+		// LID) for the same person.
+		db.conn.Exec(`CREATE TABLE IF NOT EXISTS contact_names (
+			jid        TEXT PRIMARY KEY,
+			full_name  TEXT NOT NULL DEFAULT '',
+			first_name TEXT NOT NULL DEFAULT '',
+			push_name  TEXT NOT NULL DEFAULT '',
+			synced_at  INTEGER NOT NULL DEFAULT 0
+		)`)
+	}
+
 	// Schedule tables (logical v9) are versioned independently — see
 	// store/schedule.go for why this doesn't gate on schema_version.
 	if err := db.migrateSchedule(); err != nil {
 		return err
 	}
 
-	db.setSchemaVersion(8)
+	db.setSchemaVersion(9)
 	return nil
 }
 
