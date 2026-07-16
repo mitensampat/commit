@@ -41,6 +41,18 @@ func (li *LLMInterpreter) InterpretReply(ctx context.Context, rc ReplyContext) (
 		interp.SlotIndex = 0
 		interp.Confidence = "low"
 	}
+	// Per-intent field hygiene: an accept carries only a slot index, a counter
+	// only a time. Stray extra fields would make two equivalent readings look
+	// different to SameOutcome and wedge the correction-race gate.
+	switch interp.Intent {
+	case ReplyAccept:
+		interp.CounterTime = ""
+	case ReplyCounter:
+		interp.SlotIndex = 0
+	default:
+		interp.SlotIndex = 0
+		interp.CounterTime = ""
+	}
 	return &interp, nil
 }
 
@@ -141,7 +153,7 @@ func buildOwnMessagePrompt(rc ReplyContext) string {
 	var sb strings.Builder
 	sb.WriteString(`You watch a chat thread for a scheduling assistant. The user (ME) had asked the assistant to schedule a meeting with a contact (THEM), but may have just settled it MANUALLY by texting the contact directly.
 
-Question: judging by ME's latest messages in the thread below, have ME and THEM already finalized a meeting time between themselves (e.g. "ok see you tuesday 3pm", "locked, sending an invite")? Merely discussing, asking, or proposing does NOT count — only a settled agreement.
+Question: judging by ME's latest messages in the thread below, have ME and THEM already finalized a meeting time between themselves (e.g. "ok see you tuesday 3pm", "locked, sending an invite")? Merely discussing, asking, or proposing options does NOT count. But if ME unilaterally DECLARES a specific settled time and commits to it ("locking tomorrow 5pm", "sending you an invite for wed 11", "see you tuesday at 3"), that DOES count as finalized even without an explicit acknowledgment from THEM.
 
 Return STRICT JSON: {"finalized": true|false}
 

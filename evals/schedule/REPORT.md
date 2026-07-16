@@ -2,7 +2,7 @@
 
 # @schedule interpreter eval report
 
-Model: `claude-haiku-4-5-20251001` · run at 2026-07-16 20:09 IST · 43/43 overall (100.0%)
+Model: `claude-haiku-4-5-20251001` · run at 2026-07-16 20:31 IST · 43/43 overall (100.0%)
 
 | Category | Pass | Total | Rate | Bar |
 |---|---|---|---|---|
@@ -27,7 +27,7 @@ None.
   plus 30 deterministic engine scenarios (consent scoping, idempotent propose,
   correction race, stand-down, expiry, cancel flow, command parsing, TZ
   inference) that run hermetically in CI — all green.
-- **Prompt iteration history** (three rounds):
+- **Prompt iteration history** (four rounds):
   1. Baseline: 40/44. Fixes: corpus bug (single-option cases reused the
      3-option draft), prompt rule "alternative matching an offered option =
      accept", voice-call grading widened to the two safe outcomes.
@@ -37,6 +37,10 @@ None.
      an explicit 14-day calendar hint and a tightened rule 4.
   3. Boundary flakiness on "sounds good" (single option) and banter
      classification settled with a worked-examples block + temperature 0.
+  4. Dry-run findings folded back: per-intent field normalization (an accept
+     carrying a stray counter_time wedged the correction-race gate) and the
+     own-message prompt extended to count unilateral locks ("locking tomorrow
+     5pm, sending an invite") as finalized. Full suite re-run: 43/43.
 - **Sonnet spot-check** (`claude-sonnet-4-5-20250929`) on the hard cases
   (all corrections, counter_same_time_other_day): all pass with the final
   prompt. (Note: the repo's `DefaultModel` id `claude-sonnet-4-6-20250620`
@@ -44,3 +48,7 @@ None.
 - **Safety-critical bars**: ambiguous (never book on ambiguity), correction
   (latest thread state wins), manual_resolution (watcher stand-down) are
   enforced at 100% by the test itself — any regression fails the run.
+- **End-to-end**: `go run ./cmd/schedule-dryrun -db <db-copy-dir>` walks four
+  scripted sessions (happy path, correction race, consent scoping, manual
+  resolution) against a DB copy with a fake calendar and fake sender and the
+  real LLM interpreter — all scenarios pass.

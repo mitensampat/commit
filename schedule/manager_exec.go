@@ -52,6 +52,7 @@ func (m *Manager) executeSelfDecision(ctx context.Context, s *Session, dec Decis
 			s.ProposedSlots = nil
 			s.Draft = m.redraftForSubset(ctx, s)
 		}
+		s.SentDraft = s.Draft
 		if _, err := m.Sender.SendTo(ctx, s.ContactJID, s.Draft); err != nil {
 			// WhatsApp send failure → explicit failure message (req 8).
 			s.State = StateSlotsProposed
@@ -135,13 +136,18 @@ func (m *Manager) redraftForSubset(ctx context.Context, s *Session) string {
 func (m *Manager) finalizeBooking(ctx context.Context, s *Session, directIndex int) {
 	loc := m.location()
 
+	// Explicit "yes N": the user picked a specific slot themselves (after
+	// seeing whatever was surfaced). That is direct, scoped consent to a
+	// concrete option — no thread re-read needed, only the calendar check.
+	explicit := directIndex >= 1 && directIndex <= len(s.Slots)
+
 	// 1. Re-read the thread if there was a proposal round.
 	var fresh *Interpretation
-	if s.Surfaced != nil {
+	if s.Surfaced != nil && !explicit {
 		rc := ReplyContext{
 			ContactName: s.ContactName,
 			Slots:       s.Slots,
-			Draft:       s.Draft,
+			Draft:       s.sentDraft(),
 			Thread:      m.threadSince(s.ContactJID, s.ProposedAt),
 			Now:         time.Now(),
 			Location:    loc,
@@ -155,7 +161,7 @@ func (m *Manager) finalizeBooking(ctx context.Context, s *Session, directIndex i
 	}
 
 	// 2. Work out the target window.
-	start, end, desc, ok := m.bookingTarget(s, fresh, directIndex)
+	start, end, desc, ok := m.bookingTarget(s, fresh, directIndex, explicit)
 	if !ok {
 		dec := DecideBooking(s, fresh, true, time.Now())
 		m.surfaceBookingDecision(ctx, s, dec)
@@ -169,7 +175,17 @@ func (m *Manager) finalizeBooking(ctx context.Context, s *Session, directIndex i
 		return
 	}
 
-	dec := DecideBooking(s, fresh, free, time.Now())
+	var dec Decision
+	if explicit {
+		// Only the calendar gate applies to an explicit pick.
+		if free {
+			dec = Decision{Action: ActBook}
+		} else {
+			dec = Decision{Action: ActSlotTaken, Reply: "That slot got taken on your calendar since I proposed it. Want fresh options?"}
+		}
+	} else {
+		dec = DecideBooking(s, fresh, free, time.Now())
+	}
 	if dec.Action != ActBook {
 		m.surfaceBookingDecision(ctx, s, dec)
 		return
@@ -227,17 +243,17 @@ func (m *Manager) finalizeBooking(ctx context.Context, s *Session, directIndex i
 }
 
 // bookingTarget resolves what window "yes" refers to.
-func (m *Manager) bookingTarget(s *Session, fresh *Interpretation, directIndex int) (time.Time, time.Time, string, bool) {
+func (m *Manager) bookingTarget(s *Session, fresh *Interpretation, directIndex int, explicit bool) (time.Time, time.Time, string, bool) {
 	dur := time.Duration(s.DurationMin) * time.Minute
 	if dur == 0 {
 		dur = 30 * time.Minute
 	}
-	// Direct "yes N" without a proposal round.
+	// Explicit "yes N" — the user's own pick wins.
+	if explicit {
+		sl := s.Slots[directIndex-1]
+		return sl.Start, sl.End, "Picked explicitly by the user.", true
+	}
 	if s.Surfaced == nil {
-		if directIndex >= 1 && directIndex <= len(s.Slots) {
-			sl := s.Slots[directIndex-1]
-			return sl.Start, sl.End, "Booked directly.", true
-		}
 		return time.Time{}, time.Time{}, "", false
 	}
 	// The engine's DecideBooking guards staleness; here we just resolve the
@@ -266,6 +282,7 @@ func (m *Manager) surfaceBookingDecision(ctx context.Context, s *Session, dec De
 		if dec.Reply != "" && dec.Interp == nil {
 			text = dec.Reply
 		}
+		text += "\n\n'yes' if that's right · 'yes N' to lock option N anyway · 'leave it'"
 		m.prompt(ctx, s, text)
 	case ActSlotTaken:
 		m.prompt(ctx, s, dec.Reply)
@@ -325,14 +342,14 @@ func (m *Manager) OnContactMessage(ctx context.Context, chatJID string, isFromMe
 		return
 	}
 	// Ignore our own outbound artifacts (the proposal draft itself).
-	if isFromMe && strings.TrimSpace(text) == strings.TrimSpace(s.Draft) {
+	if isFromMe && strings.TrimSpace(text) == strings.TrimSpace(s.sentDraft()) {
 		return
 	}
 
 	rc := ReplyContext{
 		ContactName: s.ContactName,
 		Slots:       s.Slots,
-		Draft:       s.Draft,
+		Draft:       s.sentDraft(),
 		Thread:      m.threadSince(s.ContactJID, s.ProposedAt),
 		Now:         time.Now(),
 		Location:    m.location(),
@@ -431,4 +448,13 @@ func (m *Manager) RunExpirySweep(now time.Time) {
 			log.Printf("schedule: session with %s expired silently after 48h", s.ContactName)
 		}
 	}
+}
+
+// sentDraft returns the draft as sent to the counterpart, falling back to the
+// current draft when nothing has been sent yet.
+func (s *Session) sentDraft() string {
+	if s.SentDraft != "" {
+		return s.SentDraft
+	}
+	return s.Draft
 }

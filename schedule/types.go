@@ -63,6 +63,9 @@ type Session struct {
 
 	Slots []Slot `json:"slots"` // currently pickable options, 1-based in user-facing text
 	Draft string `json:"draft"` // message to send to the counterpart
+	// SentDraft is the draft as actually sent to the counterpart. Thread
+	// interpretation must use this, not Draft, which the user may edit later.
+	SentDraft string `json:"sent_draft,omitempty"`
 
 	ContactTZ     string `json:"contact_tz"`      // IANA name, best inference or override
 	ContactTZNote string `json:"contact_tz_note"` // e.g. "assuming SF from +1 number"
