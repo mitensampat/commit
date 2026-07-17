@@ -9,15 +9,28 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
+  /* One hue, five stops: the gradation is navy shading down to a pale wash,
+     so nothing here is a colour the brand didn't already own. Brass is the
+     single exception, and it earns it by marking exactly one thing. */
+  :root {
+    --ink: #1a2744;
+    --ink-soft: #46536e;
+    --quiet: #8090a8;
+    --line: #dde4ec;
+    --paper: #ffffff;
+    --wash: #f5f8fb;
+    --wash-deep: #e9eff7;
+    --brass: #8a6a3b;
+  }
   body {
     font-family: "Newsreader", "Times New Roman", Georgia, serif;
     max-width: 520px;
     margin: 60px auto;
     padding: 0 20px;
-    color: #1a2744;
+    color: var(--ink);
     line-height: 1.7;
     font-size: 16px;
-    background: #fff;
+    background: var(--paper);
   }
   .header {
     display: flex;
@@ -39,11 +52,11 @@
   .header-left .version {
     font-weight: 400;
     font-size: 14px;
-    color: #8090a8;
+    color: var(--quiet);
   }
   .clock {
     font-size: 14px;
-    color: #8090a8;
+    color: var(--quiet);
   }
   h1 {
     font-size: 20px;
@@ -51,15 +64,67 @@
     margin: 0 0 24px;
   }
   p { margin: 0 0 12px; }
-  a { color: #1a2744; }
+  a { color: var(--ink); }
   b { font-weight: 600; }
-  .quiet { color: #8090a8; font-size: 14px; }
-  .quiet a { color: #8090a8; }
-  .section { margin: 24px 0; }
+  .quiet { color: var(--quiet); font-size: 14px; }
+  .quiet a { color: var(--quiet); }
   .email { font-weight: 600; }
-  hr { border: none; border-top: 1px solid #d0d8e0; margin: 28px 0; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 28px 0; }
   ol { padding-left: 20px; margin: 0 0 16px; }
   li { margin-bottom: 4px; }
+
+  /* Sections are tinted panels rather than bare text, so the page has a
+     rhythm: white, wash, white, wash. The panel bleeds slightly past the
+     text column so the tint reads as ground, not as a box. */
+  .section {
+    margin: 22px -20px;
+    padding: 20px;
+    border-radius: 10px;
+  }
+  .section.washed { background: var(--wash); }
+  .section p:last-child, .section ol:last-child { margin-bottom: 0; }
+  .section > p:first-child { margin-top: 0; }
+  .section-title {
+    font-weight: 600;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .section li { color: var(--ink-soft); }
+  .section li b, .section li code { color: var(--ink); }
+
+  /* The one thing that pops: deepest wash, and the only warm colour. */
+  .section.feature {
+    background: var(--wash-deep);
+  }
+  .tag {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: var(--brass);
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    padding: 1px 5px;
+    position: relative;
+    top: -1px;
+  }
+  .section.feature p { color: var(--ink-soft); }
+  .section.feature p:first-of-type, .section.feature p b { color: var(--ink); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85em;
+    background: rgba(26, 39, 68, 0.06);
+    border-radius: 4px;
+    /* Tight horizontal padding: a wider box leaves the following comma or
+       full stop visibly stranded in serif prose. */
+    padding: 1px 3px;
+  }
+  @media (max-width: 560px) {
+    .section { margin: 20px -8px; padding: 16px; }
+  }
   .reveal { display: none; margin-top: 12px; }
   .link { cursor: pointer; text-decoration: underline; }
 
@@ -277,45 +342,43 @@
   <div class="clock" id="clock"></div>
 </div>
 
-<p>Commit enhances your WhatsApp usage by finding commitments automatically &mdash; things you said you'd do, and things others said they'd do. it auto detects when things are done.</p>
+<p>Commit finds the promises in your WhatsApp &mdash; yours and theirs. it notices when they're done, and surfaces the ones going quiet.</p>
 
-<p>when something goes quiet, it surfaces it for follow-up.</p>
-
-<div class="section">
-<p><b>simple setup</b></p>
-<p>you scan a QR code to link your WhatsApp account, same as WhatsApp Web. Commit runs on your machine. every 10 seconds it reads new messages, sends them to the Claude API for analysis, and logs any commitments it finds.</p>
-<p>the dashboard shows everything grouped by person: what you owe, what they owe, how long it's been. you can reply, set reminders, mark things done, or dismiss them.</p>
-</div>
-
-<div class="section">
-<p><b>scheduling, without the scheduling link</b></p>
-<p>someone asks to meet. instead of sending them a booking link &mdash; which quietly says <i>my time matters more than yours, go find a slot</i> &mdash; you message yourself: <code>@schedule &lt;name&gt;</code>.</p>
-<p>Commit reads the last few messages with them, works out what the meeting is about and how long it needs, checks your real calendar, and writes back three times you're actually free &mdash; drafted in your own texting voice. you say "propose" and it goes to them as an ordinary message from you. they reply "2". you say "yes". it's booked, and they get the invite.</p>
-<p>they never see a link, a bot, or a command. they just see you, replying with times, like a person who checked their calendar for them. two words of yours, start to finish.</p>
-</div>
-
-<div class="section">
-<p><b>features</b></p>
+<div class="section washed">
+<p class="section-title">features</p>
 <ol>
-<li><code>@schedule &lt;name&gt;</code> &mdash; find time with anyone from your self-chat: reads the thread, proposes real free slots in your voice, books it when they pick</li>
-<li>finds commitments automatically &mdash; both directions. it only closes one on its own when both sides are visible in the chat; anything less is a quiet suggestion you can accept or ignore</li>
+<li>finds commitments automatically &mdash; both directions. closes one on its own only when the chat shows both sides; anything less is a quiet suggestion</li>
 <li>"act on today" &mdash; opens with the 3-5 things worth acting on now, not a list of 600</li>
 <li>morning digest &mdash; one WhatsApp message a day. quiet days send nothing</li>
 <li><code>@find</code> &mdash; ask anything about your chats, from WhatsApp or the dashboard</li>
-<li>menu bar app (mac) and system tray (windows) &mdash; see at a glance it's running and connected</li>
+<li><code>@schedule &lt;name&gt;</code> &mdash; find time with anyone, without ever leaving WhatsApp</li>
 <li>yours alone &mdash; messages stay on your machine, passcode-protected, API key encrypted</li>
+<li>menu bar app (mac) and system tray (windows) &mdash; see at a glance it's running</li>
 </ol>
 </div>
 
 <div class="section">
-<p><b>a note on privacy</b></p>
-<p>messages are decrypted on your machine and stored in a local SQLite database. nothing is uploaded to a server by Commit.</p>
-<p>message content is sent to the Claude API for commitment extraction. <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#data-retention-and-privacy">Anthropic does not train on API inputs.</a></p>
+<p class="section-title">simple setup</p>
+<p>scan a QR code, same as WhatsApp Web. Commit runs on your machine and reads new messages every 10 seconds.</p>
+<p>the dashboard groups everything by person: what you owe, what they owe, how long it's been. reply, remind, mark done, dismiss.</p>
+</div>
+
+<div class="section feature">
+<p class="section-title">scheduling, without the scheduling link <span class="tag">new</span></p>
+<p>someone asks to meet. you can send a booking link &mdash; which quietly says <i>my time matters more than yours, go find a slot</i> &mdash; or you message yourself: <code>@schedule &lt;name&gt;</code>.</p>
+<p>Commit reads the thread, checks your calendar, and drafts three times you're free in your texting voice. say "propose" &mdash; it goes as an ordinary message from you. they reply "2". say "yes". booked.</p>
+<p>they never see a link or a bot. just you, replying with times like someone who checked. two words, start to finish.</p>
+</div>
+
+<div class="section washed">
+<p class="section-title">a note on privacy</p>
+<p>messages are decrypted on your machine and stored in a local SQLite database. Commit uploads nothing.</p>
+<p>message content goes to the Claude API for extraction &mdash; <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#data-retention-and-privacy">Anthropic does not train on API inputs.</a></p>
 </div>
 
 <div class="section">
-<p><b>requirements</b></p>
-<p>macOS 12+ or Windows 10+. a WhatsApp account. a <a href="https://console.anthropic.com/">Claude API key</a>. for <code>@schedule</code>, a Google Calendar connection (optional &mdash; everything else works without it).</p>
+<p class="section-title">requirements</p>
+<p>macOS 12+ or Windows 10+. a WhatsApp account. a <a href="https://console.anthropic.com/">Claude API key</a>. Google Calendar if you want <code>@schedule</code>.</p>
 </div>
 
 <p><a href="https://github.com/mitensampat/commit/releases/latest" style="font-weight: 600;">download the latest release</a> · <a href="#screens" class="link">see it in action</a></p>
