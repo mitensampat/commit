@@ -82,6 +82,7 @@ type DraftRequest struct {
 	BookedWhen    string         // for cancel/move notes
 	RequestedDays string         // days they asked for, e.g. "Tue/Wed"
 	PreferenceMet bool           // false when we're offering days they didn't ask for
+	ToneNote      string         // standing wording instruction from the user ("warmer", "shorter")
 }
 
 // SelectedSlots resolves the Indices subset.
@@ -143,6 +144,10 @@ CRITICAL: this message CONTINUES an ongoing conversation — the contact just as
 				}
 			}
 		}
+	}
+	if dr.ToneNote != "" {
+		// The user's own instruction about wording outranks the inferred style.
+		sb.WriteString("\nIMPORTANT — the user asked for this message specifically to be: " + dr.ToneNote + "\nHonor that over the general style notes below.\n")
 	}
 	if dr.MyStyle != "" {
 		sb.WriteString("\nUser's style notes: " + dr.MyStyle + "\n")

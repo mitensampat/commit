@@ -22,14 +22,128 @@ import (
 //	OnContactMessage — a message in a chat that has an open session
 //	RunExpirySweep   — periodic 48h-silence cleanup
 type Manager struct {
-	DB      *store.DB
-	Cal     CalendarService
-	Interp  ReplyInterpreter
-	Sender  Sender
-	Creds   Creds
-	SelfJID func() string // the self-chat JID as seen in incoming messages
+	DB     *store.DB
+	Cal    CalendarService
+	Interp ReplyInterpreter
+	// Classifier reads the user's own self-chat free text (instruction vs
+	// draft). When nil, free text is never armed as a draft — we ask instead.
+	Classifier SelfTextClassifier
+	Sender     Sender
+	Creds      Creds
+	SelfJID    func() string // the self-chat JID as seen in incoming messages
 
 	mu sync.Mutex // serializes session mutations
+}
+
+// computeSlotsFor runs the window → slots search for the session's CURRENT
+// shape (window, duration, format), honoring the days the counterpart asked
+// for and falling back loudly when nothing is free on them.
+//
+// The search never starts before now: a session that sat overnight must not
+// re-offer this morning's slots.
+func (m *Manager) computeSlotsFor(ctx context.Context, s *Session) ([]Slot, error) {
+	loc := m.location()
+	now := time.Now()
+	from, to := WindowRange(s.Window, now, loc)
+	if from.Before(now) {
+		from = now
+	}
+	if !to.After(from) {
+		// The window has already gone by entirely ("today", read tomorrow).
+		// Fall back to the default forward horizon rather than searching an
+		// empty or backwards range.
+		from, to = now, now.AddDate(0, 0, 7)
+	}
+	dur := time.Duration(s.DurationMin) * time.Minute
+	if dur == 0 {
+		dur = 30 * time.Minute
+	}
+	prefDays := PreferredDays(s.Window)
+	inPerson := s.Format == "in-person"
+
+	slots, err := m.Cal.ComputeSlots(ctx, from, to, dur, inPerson, prefDays)
+	if err != nil {
+		return nil, err
+	}
+	s.RequestedDays = FormatDays(prefDays)
+	s.PreferenceMet = true
+	if len(slots) == 0 && len(prefDays) > 0 {
+		s.PreferenceMet = false
+		slots, err = m.Cal.ComputeSlots(ctx, from, to, dur, inPerson, nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Belt and braces: whatever the calendar returns, a past slot is never
+	// offerable.
+	var out []Slot
+	for _, sl := range slots {
+		if sl.Start.After(now) {
+			out = append(out, sl)
+		}
+	}
+	return out, nil
+}
+
+// redraft regenerates the outbound message for the session's current shape.
+func (m *Manager) redraft(ctx context.Context, s *Session) (string, error) {
+	loc := m.location()
+	return GenerateDraft(ctx, m.Creds, DraftRequest{
+		ContactName:   s.ContactName,
+		Topic:         s.Topic,
+		Format:        s.Format,
+		Slots:         s.Slots,
+		MyStyle:       m.DB.GetMyStyle(),
+		Location:      loc,
+		ContactTZ:     differentTZOnly(s.ContactTZ, loc),
+		ContactTZNote: s.ContactTZNote,
+		StyleSamples:  m.styleSamples(s.ContactJID),
+		RequestedDays: s.RequestedDays,
+		PreferenceMet: s.PreferenceMet,
+		ToneNote:      s.ToneNote,
+	})
+}
+
+// resurfaceOptions recomputes slots + draft for the session's current shape
+// and puts them back in front of the user for a 'propose'. Used whenever the
+// shape changed underneath the old options: a scope change, a user
+// instruction, or slots that simply expired.
+func (m *Manager) resurfaceOptions(ctx context.Context, s *Session, header string) {
+	loc := m.location()
+	slots, err := m.computeSlotsFor(ctx, s)
+	if err != nil {
+		m.prompt(ctx, s, "Calendar error: "+err.Error())
+		return
+	}
+	if len(slots) == 0 {
+		m.prompt(ctx, s, header+fmt.Sprintf("\n\nBut you have nothing free for a %d-min %s with %s in that window. Try another window — '@schedule %s next week'.",
+			s.DurationMin, ifStr(s.Format != "", s.Format, "meeting"), s.ContactName, strings.ToLower(firstWord(s.ContactName))))
+		return
+	}
+	s.Slots = slots
+	draft, err := m.redraft(ctx, s)
+	if err != nil {
+		m.prompt(ctx, s, "Couldn't redraft the message (Claude error): "+err.Error())
+		return
+	}
+	s.Draft = draft
+	// The old proposal round is void: these are different options.
+	s.ProposedAt = time.Time{}
+	s.ProposedSlots = nil
+	s.Surfaced = nil
+	s.State = StateSlotsProposed
+
+	var sb strings.Builder
+	sb.WriteString(header)
+	if !s.PreferenceMet && s.RequestedDays != "" {
+		sb.WriteString(fmt.Sprintf("\n\n⚠️ %s asked for %s — you have nothing free on those days. Closest alternatives below; the draft says so.",
+			s.ContactName, s.RequestedDays))
+	}
+	sb.WriteString("\n\nFree options:\n")
+	sb.WriteString(FormatSlotList(s.Slots, loc))
+	sb.WriteString("\n\nDraft to send:\n———\n" + s.Draft + "\n———\n\n")
+	sb.WriteString("'propose' to send it · 'propose 1 3' for a subset · 'yes N' to book directly · 'edit' · 'leave it'")
+	m.prompt(ctx, s, sb.String())
 }
 
 func (m *Manager) location() *time.Location {
@@ -231,14 +345,14 @@ func (m *Manager) handleCommand(ctx context.Context, rest string, ts time.Time) 
 			// fall through: re-ask below
 		}
 		s := &Session{
-			ID:          store.GenerateScheduleSessionID(),
-			ContactJID:  "pending:" + strings.ToLower(cmd.Name),
-			ContactName: cmd.Name,
-			State:       StateResolving,
-			Intent:      cmd.Verb,
-			Cmd:         cmd,
-			Candidates:  cands,
-			CreatedAt:   ts,
+			ID:           store.GenerateScheduleSessionID(),
+			ContactJID:   "pending:" + strings.ToLower(cmd.Name),
+			ContactName:  cmd.Name,
+			State:        StateResolving,
+			Intent:       cmd.Verb,
+			Cmd:          cmd,
+			Candidates:   cands,
+			CreatedAt:    ts,
 			LastActivity: ts,
 		}
 		var sb strings.Builder
@@ -430,57 +544,25 @@ func (m *Manager) startSession(ctx context.Context, cmd *Command, contact Contac
 		s.ContactTZ, s.ContactTZNote = InferContactTZ(contact.JID)
 	}
 
-	// Slot computation.
+	// Slot computation. Honors the days they actually asked for; if nothing is
+	// free on those days it falls back to the rest of the window — but never
+	// silently: both the user and the draft have to acknowledge the miss.
 	loc := m.location()
-	now := time.Now()
-	from, to := WindowRange(s.Window, now, loc)
-	if from.Before(now) {
-		from = now
-	}
-	dur := time.Duration(s.DurationMin) * time.Minute
-
-	// Honor the days they actually asked for. If nothing is free on those
-	// days, fall back to the rest of the window — but never silently: both
-	// the user and the draft have to acknowledge the miss.
-	prefDays := PreferredDays(s.Window)
-	inPerson := s.Format == "in-person"
-	slots, err := m.Cal.ComputeSlots(ctx, from, to, dur, inPerson, prefDays)
+	slots, err := m.computeSlotsFor(ctx, s)
 	if err != nil {
 		// OAuth failures must be loud (req 7).
 		m.sendSelfPlain(ctx, "Calendar error: "+err.Error())
 		return
 	}
-	s.RequestedDays = FormatDays(prefDays)
-	s.PreferenceMet = true
-	if len(slots) == 0 && len(prefDays) > 0 {
-		s.PreferenceMet = false
-		slots, err = m.Cal.ComputeSlots(ctx, from, to, dur, inPerson, nil)
-		if err != nil {
-			m.sendSelfPlain(ctx, "Calendar error: "+err.Error())
-			return
-		}
-	}
 	if len(slots) == 0 {
-		m.sendSelfPlain(ctx, fmt.Sprintf("No free slots for %s in that window (%s → %s). Try a different window?",
-			contact.Name, from.In(loc).Format("Mon Jan 2"), to.In(loc).Format("Mon Jan 2")))
+		m.sendSelfPlain(ctx, fmt.Sprintf("No free slots for %s in that window (%s). Try a different window?",
+			contact.Name, ifStr(s.Window != "", s.Window, "the next week")))
 		return
 	}
 	s.Slots = slots
 
 	// Draft in the user's style.
-	draft, err := GenerateDraft(ctx, m.Creds, DraftRequest{
-		ContactName:   contact.Name,
-		Topic:         s.Topic,
-		Format:        s.Format,
-		Slots:         s.Slots,
-		MyStyle:       m.DB.GetMyStyle(),
-		Location:      loc,
-		ContactTZ:     differentTZOnly(s.ContactTZ, loc),
-		ContactTZNote: s.ContactTZNote,
-		StyleSamples:  m.styleSamples(contact.JID),
-		RequestedDays: s.RequestedDays,
-		PreferenceMet: s.PreferenceMet,
-	})
+	draft, err := m.redraft(ctx, s)
 	if err != nil {
 		m.sendSelfPlain(ctx, "Couldn't draft the message (Claude error): "+err.Error())
 		return

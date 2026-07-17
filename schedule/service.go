@@ -142,7 +142,9 @@ func (g *GoogleCalendarService) ComputeSlots(ctx context.Context, from, to time.
 	raw := calendar.ComputeSlots(busy, from, to, dur, prefs, 3)
 	var out []Slot
 	for _, s := range raw {
-		out = append(out, Slot{Start: s.Start, End: s.End, Origin: "computed"})
+		// Adjacent rides along: it's what lets us pick a non-fragmenting slot
+		// when the counterpart defers the choice to us.
+		out = append(out, Slot{Start: s.Start, End: s.End, Origin: "computed", Adjacent: s.Adjacent})
 	}
 	return out, nil
 }
