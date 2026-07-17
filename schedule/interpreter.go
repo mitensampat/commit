@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -107,6 +108,9 @@ func (li *LLMInterpreter) InterpretReply(ctx context.Context, rc ReplyContext) (
 				keep = append(keep, i)
 			}
 		}
+		// Canonical order: SameOutcome compares these element-wise, so [2,1]
+		// and [1,2] must not look like the thread changed.
+		sort.Ints(keep)
 		interp.DeferSlots = keep
 	case ReplyScopeChange:
 		interp.SlotIndex = 0

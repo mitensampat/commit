@@ -368,6 +368,12 @@ func (m *Manager) bookingTarget(s *Session, fresh *Interpretation, directIndex i
 			sl := s.Slots[s.Surfaced.SlotIndex-1]
 			return sl.Start, sl.End, fmt.Sprintf("%s accepted option %d.", s.ContactName, s.Surfaced.SlotIndex), true
 		}
+	case ReplyDeference:
+		// They deferred; we picked; the user said yes to that pick.
+		if s.PickedIndex >= 1 && s.PickedIndex <= len(s.Slots) {
+			sl := s.Slots[s.PickedIndex-1]
+			return sl.Start, sl.End, fmt.Sprintf("%s left the choice to the user; Commit proposed option %d and the user confirmed.", s.ContactName, s.PickedIndex), true
+		}
 	case ReplyCounter:
 		if t, err := time.Parse(time.RFC3339, s.Surfaced.CounterTime); err == nil {
 			return t, t.Add(dur), fmt.Sprintf("%s proposed this time.", s.ContactName), true
@@ -432,7 +438,11 @@ func (m *Manager) renderInterp(s *Session, interp *Interpretation) string {
 			b.WriteString(fmt.Sprintf("%s hedged — nothing booked.", s.ContactName))
 		}
 	case ReplyDeference:
-		b.WriteString(fmt.Sprintf("%s left the pick to me.", s.ContactName))
+		if s.PickedIndex >= 1 && s.PickedIndex <= len(s.Slots) {
+			b.WriteString(fmt.Sprintf("%s left the pick to me — I'd take *%s*.", s.ContactName, FormatSlotShort(s.Slots[s.PickedIndex-1], loc)))
+		} else {
+			b.WriteString(fmt.Sprintf("%s left the pick to me.", s.ContactName))
+		}
 	case ReplyScopeChange:
 		b.WriteString(fmt.Sprintf("%s wants to change the shape of this.", s.ContactName))
 	case ReplyDirective:
@@ -527,8 +537,8 @@ func (m *Manager) OnContactMessage(ctx context.Context, chatJID string, isFromMe
 		text := m.renderInterp(s, dec.Interp)
 		text += "\n\n'yes' to lock it anyway · 'leave it' to drop · otherwise I'll wait for them."
 		m.prompt(ctx, s, text)
-	case ActAutoBook:
-		m.handleAutoBook(ctx, s, dec)
+	case ActSurfacePick:
+		m.handleDeferencePick(ctx, s, dec)
 	case ActScopeChange:
 		m.handleScopeChange(ctx, s, dec.Interp)
 	case ActNotScheduling:
@@ -538,9 +548,12 @@ func (m *Manager) OnContactMessage(ctx context.Context, chatJID string, isFromMe
 	}
 }
 
-// handleAutoBook executes a deference pick: they told us to choose, so we
-// choose, verify, and book. The self-chat message names the pick and why.
-func (m *Manager) handleAutoBook(ctx context.Context, s *Session, dec Decision) {
+// handleDeferencePick shows the pick we made when the counterpart handed the
+// choice back. It verifies the slot is still free and then asks for the one
+// word — it does NOT book. Making the pick is the fussiness we removed; asking
+// for consent is not fussiness, it's the invariant: nothing reaches the
+// counterpart without the user's word.
+func (m *Manager) handleDeferencePick(ctx context.Context, s *Session, dec Decision) {
 	loc := m.location()
 	if dec.Index < 1 || dec.Index > len(s.Slots) {
 		m.prompt(ctx, s, fmt.Sprintf("%s left the pick to me but I've lost track of the options — say 'yes N' to lock one.", s.ContactName))
@@ -557,10 +570,13 @@ func (m *Manager) handleAutoBook(ctx context.Context, s *Session, dec Decision) 
 			s.ContactName, FormatSlotShort(sl, loc)))
 		return
 	}
-	note := fmt.Sprintf("%s left the pick to me — going with *%s* because %s.",
+	text := fmt.Sprintf("%s left the pick to me — I'd take *%s* (%s).",
 		s.ContactName, FormatSlotShort(sl, loc), dec.Reason)
-	m.sendSelfPlain(ctx, note)
-	m.bookSlot(ctx, s, sl, fmt.Sprintf("%s deferred the choice; Commit picked.", s.ContactName))
+	if dec.Interp != nil && dec.Interp.SideNote != "" {
+		text += "\nAlso: " + dec.Interp.SideNote
+	}
+	text += "\n\n'yes' to book it and confirm to them · 'yes N' for another · 'leave it'"
+	m.prompt(ctx, s, text)
 }
 
 // handleScopeChange recomputes for the new shape. A 30-minute slot may not

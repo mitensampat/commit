@@ -2,7 +2,7 @@
 
 # @schedule interpreter eval report
 
-Model: `claude-haiku-4-5-20251001` · run at 2026-07-17 10:25 IST · 89/89 overall (100.0%)
+Model: `claude-haiku-4-5-20251001` · run at 2026-07-17 10:43 IST · 89/89 overall (100.0%)
 
 | Category | Pass | Total | Rate | Bar |
 |---|---|---|---|---|
@@ -53,12 +53,34 @@ were re-graded on the merits, not to make a run go green — in each the new
 answer is at least as safe as the old one:
 
 - `ambiguous/either_works` now accepts `ambiguous` OR `deference`. Read as a
-  sloppy "any of them work", "either works" IS deference, and picking is then
-  correct — they blessed every option. Neither reading books an unagreed slot;
-  guessing a single slot (still forbidden) would.
+  sloppy "any of them work", "either works" IS deference, and making a pick is
+  then correct — they blessed every option. Neither reading books anything on
+  its own: a deference pick is surfaced for the user's `yes` like everything
+  else. Guessing a single slot as an `accept` (still forbidden) would be the
+  unsafe reading.
 - `correction/correct_to_unsure` now accepts `ambiguous` OR `soft_yes`. A firm
   pick later hedged ("don't lock it yet") is precisely a soft yes. Neither
   reading books.
+
+## The consent invariant
+
+Nothing reaches the counterpart without the user's word. This holds on every
+path in the widened taxonomy, and the eval suite pins it:
+
+- **soft_yes** holds; it never books (safety-critical, 100%).
+- **deference** is the interesting one. "You pick" means Commit MAKES the pick
+  — asking "which one?" after the counterpart already declined to choose is
+  the fussiness worth removing. But making the pick is not permission to send
+  it. Commit picks, verifies the slot is free, shows it with the reason, and
+  waits for the same one `yes` every other path costs. The `yes` then books
+  through the normal verified route: thread re-read, correction race,
+  past-slot guard, `VerifyFree`.
+- **directive** and **counter** surface a checked time; they never book.
+- **scope_change** recomputes and waits for a `propose`.
+
+An earlier revision had deference book autonomously. That was wrong and is
+gone: it booked the event AND messaged the counterpart with the user never
+typing anything.
 
 ## Bars
 
@@ -76,10 +98,16 @@ answer is at least as safe as the old one:
 
 ## Stability
 
-The suite is stochastic, so 100% was confirmed across **three consecutive full
-runs** (86/86, 86/86, 86/86) before the `note` cases landed, and 89/89 on the
-final run above. Single-run 100% was not treated as sufficient evidence for a
-100% bar.
+The suite is stochastic, so a single green run is not treated as sufficient
+evidence for a 100% bar. 100% has been confirmed across **three consecutive
+full runs on the final code** (89/89, 89/89, 89/89), plus the report run
+stamped above. An earlier round confirmed the same three-run way at 86/86
+before the `note` cases landed.
+
+The deference consent change did not move these numbers, and shouldn't have:
+it changed what the engine DOES with a `deference` reading, not how the
+interpreter classifies one. The engine scenarios are where that behavior is
+pinned.
 
 ## Prompt iteration history (this round)
 
@@ -115,6 +143,16 @@ Four rounds, each driven by a real failing run:
    — a personal note now falls through in silence, neither armed nor asked
    about.
 
+A fifth round changed no prompts and no eval numbers, but corrected the
+behavior underneath `deference`: the pick is now surfaced for the user's `yes`
+rather than booked autonomously (see "The consent invariant"). Teaching the
+booking path about `ReplyDeference` — `targetStart`, `bookingTarget`, and the
+"clear yes" gate in `DecideBooking`, with the pick recorded as
+`Session.PickedIndex` — was the right shape, rather than routing around those
+gates. `SameOutcome` also learned to compare `DeferSlots`, so narrowing "any of
+these" to "Tue or Wed" reads as a thread change rather than a repeat, and
+`DeferSlots` is sorted at normalization so ordering can't fake one.
+
 Corpus bugs found and fixed while iterating (the eval was wrong, not the code):
 
 - `combined_window_duration` asked for 45 min but the fixture session was
@@ -126,11 +164,14 @@ Corpus bugs found and fixed while iterating (the eval was wrong, not the code):
 
 ## Deterministic engine scenarios
 
-**63 scenarios** (up from 30) in `engine_test.go`, hermetic, no network:
+**69 scenarios** (up from 30) in `engine_test.go`, hermetic, no network:
 the pre-existing 30 (consent scoping, idempotent propose, correction race,
-stand-down, expiry, cancel flow, command parsing, TZ inference) plus 33 new
+stand-down, expiry, cancel flow, command parsing, TZ inference) plus 39 new
 ones covering the Held state, deference pick selection (adjacent beats
-earlier; subset respected; past slots skipped), scope mutation + recompute,
+earlier; subset respected; past slots skipped) AND the invariant that a pick
+is surfaced rather than booked — plus that the user's `yes` then books it
+through the same verified path (correction race, past-slot guard, VerifyFree
+all still apply), scope mutation + recompute,
 directive verification, stand-down close (quiet vs loud), the past-slot guard
 (at surface AND at book, slots and counter-times), media surfacing + burst
 rate-limiting, and instruction-vs-draft routing (including that a classifier
@@ -160,7 +201,19 @@ race, consent scoping, manual resolution) plus:
   session still replaces the draft.
 - **G — voice note**: surfaced rather than invisible, session stays open, and a
   burst of four more media produces no further nudges.
-- **H — deference**: Commit picks, names the pick and why, and books.
+- **H — deference**: Commit makes the pick and names why, surfaces it, and
+  books only on the user's `yes` — at which point the counterpart is confirmed.
+
+Note that the dry-run is stochastic end-to-end in a way the LLM corpus is not:
+the corpus pins the draft as a fixture, whereas the dry-run GENERATES the draft
+each run, so the interpreter's input varies. One run in ~six, scenario C's
+draft came out listing only the contact-side times (10:15 PM / 5:00 AM rather
+than both timezones) and "the first one works" was then misread as a reject.
+Re-runs read it as `accept` slot 1, and the fixed-input corpus is 89/89 across
+four runs, so this is the harness's variance, not an interpretation
+regression — but it does expose a pre-existing drafting-prompt weakness worth
+its own look: `GenerateDraft` is asked to give the contact's timezone "too",
+and occasionally gives it *instead*. Left alone here as out of scope.
 
 The dry-run earned its keep this round by catching two things the unit tests
 could not:

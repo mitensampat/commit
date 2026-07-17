@@ -96,6 +96,12 @@ type Session struct {
 	// message replaces the draft.
 	AwaitingDraftEdit bool `json:"awaiting_draft_edit"`
 
+	// PickedIndex — the 1-based slot COMMIT chose when the counterpart handed
+	// the choice back ("you pick"). The pick is ours, so it has to be
+	// remembered: the counterpart's reply names no slot, and the user's "yes"
+	// must resolve to the exact option they were shown.
+	PickedIndex int `json:"picked_index,omitempty"`
+
 	// Surfaced is the interpretation we showed the user in the yes/edit/leave-it
 	// prompt. At "yes" time the thread is re-read; if the fresh interpretation
 	// differs materially, we surface the change instead of booking.
@@ -296,13 +302,16 @@ type Interpretation struct {
 // SameOutcome reports whether two interpretations would book the same thing.
 // Scope fields participate: a 30→60 change and a 30→45 change are different
 // outcomes, and treating them as equal would let a stale scope through the
-// correction-race gate.
+// correction-race gate. DeferSlots participates for the same reason: narrowing
+// "any of these" to "Tue or Wed" changes which slot we'd pick, so it is a
+// thread change, not a repeat.
 func (a *Interpretation) SameOutcome(b *Interpretation) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
 	return a.Intent == b.Intent && a.SlotIndex == b.SlotIndex && a.CounterTime == b.CounterTime &&
-		a.NewDurationMin == b.NewDurationMin && a.NewFormat == b.NewFormat
+		a.NewDurationMin == b.NewDurationMin && a.NewFormat == b.NewFormat &&
+		sameInts(a.DeferSlots, b.DeferSlots)
 }
 
 // ThreadMsg is one message in the counterpart chat, for interpretation.

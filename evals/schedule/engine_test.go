@@ -424,21 +424,88 @@ func TestSoftYes_WatcherStaysLiveInHeld(t *testing.T) {
 	}
 }
 
-// ── Deference — we pick, and we pick well ──
+// ── Deference — we pick, we pick well, and we STILL ask ──
+
+// SAFETY CRITICAL: making the pick is not permission to send it. Nothing
+// reaches the counterpart without the user's word.
+func TestDeference_SurfacesThePickAndNeverBooksOnItsOwn(t *testing.T) {
+	s := baseSession(schedule.StateAwaitingReply)
+	d := schedule.HandleCounterpartReply(s,
+		&schedule.Interpretation{Intent: schedule.ReplyDeference, Confidence: "high"},
+		t0.Add(2*time.Hour), t0.Add(2*time.Hour))
+	if d.Action != schedule.ActSurfacePick {
+		t.Fatalf("deference must surface the pick for consent, never book: got %s", d.Action)
+	}
+	if s.BookedEventID != "" || s.BookedSlot != nil {
+		t.Fatal("deference must not book anything without the user's yes")
+	}
+	if s.State != schedule.StateReplySurfaced {
+		t.Fatalf("want reply_surfaced so a 'yes' lands: got %s", s.State)
+	}
+	if s.PickedIndex != d.Index {
+		t.Fatalf("the pick must be recorded on the session for the 'yes' to resolve: picked=%d dec=%d", s.PickedIndex, d.Index)
+	}
+}
 
 func TestDeference_PicksEarliestWhenNoneAdjacent(t *testing.T) {
 	s := baseSession(schedule.StateAwaitingReply)
 	d := schedule.HandleCounterpartReply(s,
 		&schedule.Interpretation{Intent: schedule.ReplyDeference, Confidence: "high"},
 		t0.Add(2*time.Hour), t0.Add(2*time.Hour))
-	if d.Action != schedule.ActAutoBook {
-		t.Fatalf("deference must auto-pick: got %s", d.Action)
+	if d.Action != schedule.ActSurfacePick {
+		t.Fatalf("deference must pick: got %s", d.Action)
 	}
 	if d.Index != 1 {
 		t.Fatalf("no adjacent slots → earliest wins: got %d", d.Index)
 	}
 	if d.Reason == "" {
 		t.Fatal("the pick must come with a reason to name in the self-chat")
+	}
+}
+
+// The whole point of the pick: one 'yes' books what we showed them, through
+// the same verified path as every other booking.
+func TestDeference_YesBooksThePickedSlot(t *testing.T) {
+	s := baseSession(schedule.StateAwaitingReply)
+	interp := &schedule.Interpretation{Intent: schedule.ReplyDeference, Confidence: "high"}
+	schedule.HandleCounterpartReply(s, interp, t0.Add(2*time.Hour), t0.Add(2*time.Hour))
+	s.MarkPrompted(t0.Add(2 * time.Hour))
+
+	d := schedule.HandleSelfChat(s, self("yes", t0.Add(2*time.Hour+time.Minute), true))
+	if d.Action != schedule.ActRequestBooking {
+		t.Fatalf("'yes' over a surfaced pick must request booking: got %s", d.Action)
+	}
+	// The thread hasn't moved: the fresh read is the same deference.
+	fresh := &schedule.Interpretation{Intent: schedule.ReplyDeference, Confidence: "high"}
+	if dec := schedule.DecideBooking(s, fresh, true, t0.Add(2*time.Hour+time.Minute)); dec.Action != schedule.ActBook {
+		t.Fatalf("a consented deference pick must book: got %s (%s)", dec.Action, dec.Reason)
+	}
+}
+
+// The correction race applies to a pick exactly as it does to an acceptance.
+func TestDeference_NarrowedSubsetAfterPickSurfacesAsAChange(t *testing.T) {
+	s := baseSession(schedule.StateAwaitingReply)
+	schedule.HandleCounterpartReply(s,
+		&schedule.Interpretation{Intent: schedule.ReplyDeference, Confidence: "high"},
+		t0.Add(2*time.Hour), t0.Add(2*time.Hour))
+	// They come back with "actually, Wed or Thu only" — that changes which
+	// slot we'd pick, so it is a thread change, not a repeat.
+	fresh := &schedule.Interpretation{Intent: schedule.ReplyDeference, DeferSlots: []int{2, 3}, Confidence: "high"}
+	if dec := schedule.DecideBooking(s, fresh, true, t0.Add(3*time.Hour)); dec.Action != schedule.ActSurfaceChange {
+		t.Fatalf("a narrowed subset must surface, not book the old pick: got %s", dec.Action)
+	}
+}
+
+func TestDeference_PastGuardStillAppliesAtBook(t *testing.T) {
+	s := baseSession(schedule.StateAwaitingReply)
+	schedule.HandleCounterpartReply(s,
+		&schedule.Interpretation{Intent: schedule.ReplyDeference, Confidence: "high"},
+		t0.Add(2*time.Hour), t0.Add(2*time.Hour))
+	fresh := &schedule.Interpretation{Intent: schedule.ReplyDeference, Confidence: "high"}
+	// The user says yes days later, after the picked slot has gone by.
+	late := s.Slots[s.PickedIndex-1].Start.Add(time.Hour)
+	if dec := schedule.DecideBooking(s, fresh, true, late); dec.Action != schedule.ActSlotPast {
+		t.Fatalf("a picked slot that has passed must never book: got %s", dec.Action)
 	}
 }
 

@@ -60,9 +60,11 @@ const (
 	// ActHold — soft yes. Tell the user which slot it points at, book
 	// nothing, keep watching. Decision.Index is the slot it points at.
 	ActHold Action = "hold"
-	// ActAutoBook — they deferred the choice to us. Decision.Index is our
-	// pick, Decision.Reason says why. Wiring re-verifies then books.
-	ActAutoBook Action = "auto_book"
+	// ActSurfacePick — they deferred the choice to us, so we made it.
+	// Decision.Index is our pick, Decision.Reason says why. Wiring verifies
+	// it's free and shows it for a 'yes'. It does NOT book: nothing reaches
+	// the counterpart without the user's word.
+	ActSurfacePick Action = "surface_pick"
 	// ActScopeChange — the meeting's shape changed. Wiring must recompute
 	// slots at the new duration/format, redraft, and re-surface for 'propose'.
 	ActScopeChange Action = "scope_change"
@@ -396,18 +398,22 @@ func HandleCounterpartReply(s *Session, interp *Interpretation, msgTime, now tim
 		return Decision{Action: ActHold, Index: interp.SlotIndex, Interp: interp}
 
 	case ReplyDeference:
-		// They handed the choice back. Picking is what the user obviously
-		// wants; asking them to pick after the counterpart already declined to
-		// would be fussy.
+		// They handed the choice back, so we make it — asking "which one?"
+		// after the counterpart already declined to choose is the fussiness
+		// worth removing. But making the pick is not permission to send it:
+		// nothing reaches the counterpart without the user's word, so we
+		// surface the pick and wait for the same one 'yes' every other path
+		// costs.
 		idx, why := PickDeferredSlot(s.Slots, interp.DeferSlots, now)
 		if idx == 0 {
 			return Decision{Action: ActSlotPast, Interp: interp, Reason: "all_slots_passed"}
 		}
 		s.Surfaced = interp
 		s.SurfacedAtMsgTime = msgTime
+		s.PickedIndex = idx
 		s.State = StateReplySurfaced
 		s.touch(now)
-		return Decision{Action: ActAutoBook, Index: idx, Reason: why, Interp: interp}
+		return Decision{Action: ActSurfacePick, Index: idx, Reason: why, Interp: interp}
 
 	case ReplyScopeChange:
 		// The shape changed, not the time. Slots computed for 30 minutes may
@@ -510,7 +516,12 @@ func DecideBooking(s *Session, fresh *Interpretation, slotFree bool, now time.Ti
 			s.touch(now)
 			return Decision{Action: ActSurfaceChange, Interp: fresh, Reason: "thread_changed"}
 		}
-		if fresh.Confidence == "low" || (fresh.Intent != ReplyAccept && fresh.Intent != ReplyCounter) {
+		// Which readings are a mandate to book, once the user has said yes?
+		// An acceptance and a counter-proposal name a time themselves.
+		// Deference names none — but "you pick" IS a clear answer, and the
+		// user consented to the concrete pick we showed them, so it books
+		// through this same verified path rather than around it.
+		if fresh.Confidence == "low" || (fresh.Intent != ReplyAccept && fresh.Intent != ReplyCounter && fresh.Intent != ReplyDeference) {
 			return Decision{Action: ActSurfaceChange, Interp: fresh, Reason: "not_a_clear_yes"}
 		}
 	}
@@ -541,6 +552,12 @@ func (s *Session) targetStart() (time.Time, bool) {
 	switch s.Surfaced.Intent {
 	case ReplyAccept, ReplySoftYes:
 		if i := s.Surfaced.SlotIndex; i >= 1 && i <= len(s.Slots) {
+			return s.Slots[i-1].Start, true
+		}
+	case ReplyDeference:
+		// The counterpart named no slot — the pick is ours, recorded when we
+		// surfaced it.
+		if i := s.PickedIndex; i >= 1 && i <= len(s.Slots) {
 			return s.Slots[i-1].Start, true
 		}
 	case ReplyCounter, ReplyDirective:
