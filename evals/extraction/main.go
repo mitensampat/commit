@@ -190,15 +190,36 @@ func runBaseline(db *store.DB, out string, n int) {
 	if apiKey == "" {
 		log.Fatal("no API key in DB copy")
 	}
-	items := sampleCommitments(db, n)
-	log.Printf("sampled %d commitments", len(items))
+	path := filepath.Join(out, "baseline.json")
+
+	// Resume: reuse an existing sample and its verdicts, judging only the gaps.
+	var items []SampledItem
+	var prior BaselineArtifact
+	if readJSONOK(path, &prior) && len(prior.Items) > 0 {
+		items = prior.Items
+		done := 0
+		for _, it := range items {
+			if it.Judgment != nil {
+				done++
+			}
+		}
+		log.Printf("resuming existing sample: %d items, %d already judged", len(items), done)
+	} else {
+		items = sampleCommitments(db, n)
+		log.Printf("sampled %d commitments", len(items))
+	}
 
 	ctx := context.Background()
 	for i := range items {
 		it := &items[i]
+		if it.Judgment != nil {
+			continue
+		}
 		msgs := reconstructWindow(db, it)
 		prompt := buildJudgePrompt(it, msgs, siblingTitles(db, it))
-		resp, err := callJudge(ctx, apiKey, prompt, 1500)
+		resp, err := callWithRetry(ctx, func() (string, error) {
+			return callJudge(ctx, apiKey, prompt, 1500)
+		})
 		if err != nil {
 			log.Printf("[%d/%d] judge error for %s: %v", i+1, len(items), it.ID, err)
 			continue
@@ -210,14 +231,20 @@ func runBaseline(db *store.DB, out string, n int) {
 		}
 		it.Judgment = &j
 		log.Printf("[%d/%d] %s real=%v noise=%q title=%s", i+1, len(items), it.ID[:8], j.RealCommitment, j.NoiseCategory, j.TitleQuality)
+		// Persist after every judgment — never lose completed API work.
+		writeJSON(path, BaselineArtifact{
+			GeneratedAt: time.Now().Format(time.RFC3339),
+			JudgeModel:  judgeModel,
+			Items:       items,
+		})
 	}
 
-	writeJSON(filepath.Join(out, "baseline.json"), BaselineArtifact{
+	writeJSON(path, BaselineArtifact{
 		GeneratedAt: time.Now().Format(time.RFC3339),
 		JudgeModel:  judgeModel,
 		Items:       items,
 	})
-	log.Printf("wrote %s", filepath.Join(out, "baseline.json"))
+	log.Printf("wrote %s", path)
 }
 
 func sampleCommitments(db *store.DB, n int) []SampledItem {
@@ -641,6 +668,8 @@ func runReplay(db *store.DB, out string) {
 		}
 		art.Batches = append(art.Batches, rb)
 		log.Printf("batch %d/%d: %d extracted, %d kept, %d baseline-real", bi+1, len(batches), len(rb.Extractions), len(kept), len(realBaseline))
+		// Persist after every batch — a long run must not lose completed work.
+		writeJSON(filepath.Join(out, "replay.json"), art)
 	}
 
 	writeJSON(filepath.Join(out, "replay.json"), art)
