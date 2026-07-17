@@ -2,7 +2,7 @@
 
 # @schedule interpreter eval report
 
-Model: `claude-haiku-4-5-20251001` · run at 2026-07-16 20:31 IST · 43/43 overall (100.0%)
+Model: `claude-haiku-4-5-20251001` · run at 2026-07-17 10:25 IST · 89/89 overall (100.0%)
 
 | Category | Pass | Total | Rate | Bar |
 |---|---|---|---|---|
@@ -10,45 +10,167 @@ Model: `claude-haiku-4-5-20251001` · run at 2026-07-16 20:31 IST · 43/43 overa
 | ambiguous | 6 | 6 | 100% | 100% (safety-critical) |
 | correction | 5 | 5 | 100% | 100% (safety-critical) |
 | counter | 5 | 5 | 100% | 95% |
+| deference | 6 | 6 | 100% | 95% |
+| directive | 5 | 5 | 100% | 95% |
+| instruction_vs_draft | 16 | 16 | 100% | 100% (safety-critical) |
 | manual_resolution | 5 | 5 | 100% | 100% (safety-critical) |
 | mixed | 4 | 4 | 100% | 95% |
 | non_reply | 4 | 4 | 100% | 95% |
+| not_scheduling | 6 | 6 | 100% | 100% (safety-critical) |
 | rejection | 4 | 4 | 100% | 95% |
+| scope_change | 6 | 6 | 100% | 95% |
+| soft_yes | 7 | 7 | 100% | 100% (safety-critical) |
 
 ## Failures
 
 None.
 
-## Notes
+## Old vs new categories
 
-- **Real-API runs on haiku** (`claude-haiku-4-5-20251001`, temperature 0) to
-  match production interpretation cost. The table above is the final full run;
-  the corpus is 43 LLM cases (38 reply-interpretation + 5 manual-resolution)
-  plus 30 deterministic engine scenarios (consent scoping, idempotent propose,
-  correction race, stand-down, expiry, cancel flow, command parsing, TZ
-  inference) that run hermetically in CI — all green.
-- **Prompt iteration history** (four rounds):
-  1. Baseline: 40/44. Fixes: corpus bug (single-option cases reused the
-     3-option draft), prompt rule "alternative matching an offered option =
-     accept", voice-call grading widened to the two safe outcomes.
-  2. 43/44 + sonnet spot-check exposed two real weaknesses: weekday→date
-     arithmetic (counter landed on Saturday instead of Friday) and the
-     matches-offered-option rule firing on same-day-different-time. Fixed with
-     an explicit 14-day calendar hint and a tightened rule 4.
-  3. Boundary flakiness on "sounds good" (single option) and banter
-     classification settled with a worked-examples block + temperature 0.
-  4. Dry-run findings folded back: per-intent field normalization (an accept
-     carrying a stray counter_time wedged the correction-race gate) and the
-     own-message prompt extended to count unilateral locks ("locking tomorrow
-     5pm, sending an invite") as finalized. Full suite re-run: 43/43.
-- **Sonnet spot-check** (`claude-sonnet-4-5-20250929`) on the hard cases
-  (all corrections, counter_same_time_other_day): all pass with the final
-  prompt. (Note: the repo's `DefaultModel` id `claude-sonnet-4-6-20250620`
-  404s on this API key.)
-- **Safety-critical bars**: ambiguous (never book on ambiguity), correction
-  (latest thread state wins), manual_resolution (watcher stand-down) are
-  enforced at 100% by the test itself — any regression fails the run.
-- **End-to-end**: `go run ./cmd/schedule-dryrun -db <db-copy-dir>` walks four
-  scripted sessions (happy path, correction race, consent scoping, manual
-  resolution) against a DB copy with a fake calendar and fake sender and the
-  real LLM interpreter — all scenarios pass.
+The eight categories above the line existed before the reply-taxonomy work
+(43 cases); the six below are new (46 cases). Every number is from the real-API
+run stamped above — no projections.
+
+| | Category | Pass/Total | Bar |
+|---|---|---|---|
+| existing | acceptance | 10/10 | 95% |
+| existing | ambiguous | 6/6 | 100% (safety-critical) |
+| existing | correction | 5/5 | 100% (safety-critical) |
+| existing | counter | 5/5 | 95% |
+| existing | manual_resolution | 5/5 | 100% (safety-critical) |
+| existing | mixed | 4/4 | 95% |
+| existing | non_reply | 4/4 | 95% |
+| existing | rejection | 4/4 | 95% |
+| **new** | soft_yes | 7/7 | 100% (safety-critical) |
+| **new** | deference | 6/6 | 95% |
+| **new** | scope_change | 6/6 | 95% |
+| **new** | directive | 5/5 | 95% |
+| **new** | not_scheduling | 6/6 | 100% (safety-critical) |
+| **new** | instruction_vs_draft | 16/16 | 100% (safety-critical) |
+
+Two existing cases had their expected values widened by the new taxonomy. Both
+were re-graded on the merits, not to make a run go green — in each the new
+answer is at least as safe as the old one:
+
+- `ambiguous/either_works` now accepts `ambiguous` OR `deference`. Read as a
+  sloppy "any of them work", "either works" IS deference, and picking is then
+  correct — they blessed every option. Neither reading books an unagreed slot;
+  guessing a single slot (still forbidden) would.
+- `correction/correct_to_unsure` now accepts `ambiguous` OR `soft_yes`. A firm
+  pick later hedged ("don't lock it yet") is precisely a soft yes. Neither
+  reading books.
+
+## Bars
+
+- **Safety-critical (100%, enforced by the test itself — any regression fails
+  the run)**: `ambiguous` (never book on ambiguity), `correction` (latest
+  thread state wins), `manual_resolution` (watcher stand-down), `soft_yes` (a
+  hedge is not consent — must never book), `not_scheduling` (always stand down
+  and close), `instruction_vs_draft` (an instruction must never become the
+  outbound message).
+- **Everything else: 95%.**
+- `instruction_vs_draft` grades asymmetrically, matching the real cost: any
+  non-draft classified as a confident `draft` is an automatic fail regardless
+  of the intent label, because that is the case that SENDS the user's private
+  note to the contact.
+
+## Stability
+
+The suite is stochastic, so 100% was confirmed across **three consecutive full
+runs** (86/86, 86/86, 86/86) before the `note` cases landed, and 89/89 on the
+final run above. Single-run 100% was not treated as sufficient evidence for a
+100% bar.
+
+## Prompt iteration history (this round)
+
+Four rounds, each driven by a real failing run:
+
+1. **Baseline 60/68.** Eight failures, all informative:
+   - `soft_yes/should_work` came back as `accept` — the safety-critical miss.
+     Fixed by enumerating hedge markers explicitly and contrasting the minimal
+     pair "wed works" (accept) vs "wed should work" (soft_yes).
+   - Two directives (`ring me thursday at 11`, `call me wednesday at 6pm`) read
+     as `counter_propose`. Fixed by making the tell grammatical MOOD, with
+     imperative openers listed and a memorized contrast pair.
+   - `scope_change/shorter_15` parked in `side_note`. Fixed by stating that a
+     scope change needs no request frame.
+   - `correction/correct_to_other_offered_slot` returned a `counter_time`
+     exactly equal to an offered slot. Fixed **deterministically** rather than
+     by prompt: a counter/directive naming a time we already offered is
+     normalized to an `accept` of that slot. The model reads clocks more
+     reliably than pragmatics, so this is settled on timestamps.
+   - Two corpus bugs of our own making (see below).
+2. **84/86.** `single_option_sounds_good` regressed to `ambiguous` — the
+   enlarged "when torn, prefer ambiguous" guidance had drowned out the
+   single-option carve-out. Fixed by making the option COUNT decide, and
+   carving the exception out of the caution rule explicitly.
+3. **85/86.** A real draft addressed to the contact was read as an instruction,
+   then (after a first fix) as `unclear`. Root cause: the "when torn → unclear"
+   warning sat BEFORE the decision procedure and swamped it — the classifier
+   had gone from reckless to useless. Fixed by ordering: the addressee test is
+   authoritative when conclusive; the caution applies only when it isn't.
+4. **86/86 → 89/89.** Dry-run finding folded back: with a session open, a
+   grocery note in the self-chat drew "Not sure if that's a note for me…". The
+   self-chat is also the user's notepad, so a fourth outcome (`note`) was added
+   — a personal note now falls through in silence, neither armed nor asked
+   about.
+
+Corpus bugs found and fixed while iterating (the eval was wrong, not the code):
+
+- `combined_window_duration` asked for 45 min but the fixture session was
+  already 30 min in an earlier draft of the case — "0 = unchanged" was a
+  correct answer, so the case tested nothing.
+- `draft_apology_reschedule` is genuinely borderline; it is kept as a `draft`
+  case because the apology + "can we" + "I'm free" are all aimed at the
+  contact, and it now passes on the addressee rule rather than by luck.
+
+## Deterministic engine scenarios
+
+**63 scenarios** (up from 30) in `engine_test.go`, hermetic, no network:
+the pre-existing 30 (consent scoping, idempotent propose, correction race,
+stand-down, expiry, cancel flow, command parsing, TZ inference) plus 33 new
+ones covering the Held state, deference pick selection (adjacent beats
+earlier; subset respected; past slots skipped), scope mutation + recompute,
+directive verification, stand-down close (quiet vs loud), the past-slot guard
+(at surface AND at book, slots and counter-times), media surfacing + burst
+rate-limiting, and instruction-vs-draft routing (including that a classifier
+failure degrades to asking, never to arming).
+
+One pre-existing engine test changed meaning:
+`TestScoping_ScopedFreeTextReplacesDraft` asserted the exact foot-gun being
+fixed — that unprompted free text becomes the draft. It is now
+`TestScoping_ScopedFreeTextGoesToClassifier` and asserts the opposite: the
+engine hands the text to the classifier and touches nothing itself.
+
+Plus `schedule/interpreter_test.go`: `parseFlexibleTime`, guarding a latent
+bug the dry-run exposed (see below).
+
+## End-to-end
+
+`go run ./cmd/schedule-dryrun -db <db-copy-dir>` walks **eight** scripted
+sessions against a DB copy with a fake calendar and fake sender and the real
+LLM interpreter — all pass. The four pre-existing ones (happy path, correction
+race, consent scoping, manual resolution) plus:
+
+- **E — soft yes**: hold (nothing booked) → survives banter while held → later
+  firm-up surfaces as a normal accept → books only on consent.
+- **F — instruction vs draft**: the exact field failure ("he asked for Tue or
+  Wed, our entire proposal is wrong") is NOT armed, does NOT produce "Draft
+  updated", recomputes the window, and re-surfaces; a real draft in the same
+  session still replaces the draft.
+- **G — voice note**: surfaced rather than invisible, session stays open, and a
+  burst of four more media produces no further nudges.
+- **H — deference**: Commit picks, names the pick and why, and books.
+
+The dry-run earned its keep this round by catching two things the unit tests
+could not:
+
+1. **A latent booking bug.** The model intermittently emits a zone-less
+   timestamp (`2026-07-17T17:30:00`). A strict `time.Parse(time.RFC3339, …)`
+   fails, so a counter-proposed time silently never became an event — the
+   session just refused to complete. Fixed at the boundary with
+   `parseFlexibleTime` (zone-less means the user's timezone, which is what the
+   prompt asks for) and covered by unit tests.
+2. **The nil-Classifier path**, which the harness itself hit before it was
+   wired: it degraded to asking rather than arming, confirming the safe
+   default is real and not just intended.
