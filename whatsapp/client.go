@@ -254,15 +254,25 @@ func (c *Client) reconnect(client *whatsmeow.Client) {
 
 func (c *Client) handleMessage(evt *events.Message) {
 	text := extractText(evt.Message)
-	if text == "" {
-		return
-	}
 
 	chatJID := evt.Info.Chat.String()
 	if evt.Info.Chat.Server == types.BroadcastServer {
 		return
 	}
 	if c.db.IsChatMuted(chatJID) {
+		return
+	}
+
+	if text == "" {
+		// Nothing readable. If it's media and a scheduling session is waiting
+		// on this person, the watcher needs to know something arrived — going
+		// silent on a voice note is what makes @schedule look broken. The
+		// message itself is NOT saved: we have no text, and the messages table
+		// must stay honest.
+		if kind, ok := mediaKindOf(evt.Message); ok {
+			c.notifyScheduleWatcherMedia(chatJID, evt.Info.Chat.Server == types.GroupServer,
+				evt.Info.IsFromMe, kind, evt.Info.Timestamp)
+		}
 		return
 	}
 	senderJID := evt.Info.Sender.String()
@@ -709,4 +719,3 @@ func (c *Client) handleHistorySync(evt *events.HistorySync) {
 		log.Printf("history sync: saved %d messages from %d conversations", count, len(conversations))
 	}
 }
-

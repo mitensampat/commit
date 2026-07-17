@@ -58,12 +58,14 @@ func (c *Client) InitScheduler(db *store.DB) {
 		// the model is pinned rather than following the extraction model.
 		Model: func() string { return store.FallbackModel },
 	}
+	li := &schedule.LLMInterpreter{Creds: creds}
 	c.scheduler = &schedule.Manager{
-		DB:     db,
-		Cal:    schedule.NewGoogleCalendarService(db),
-		Interp: &schedule.LLMInterpreter{Creds: creds},
-		Sender: &waSender{c: c},
-		Creds:  creds,
+		DB:         db,
+		Cal:        schedule.NewGoogleCalendarService(db),
+		Interp:     li,
+		Classifier: li,
+		Sender:     &waSender{c: c},
+		Creds:      creds,
 		SelfJID: func() string {
 			target, ok := c.SelfChatTarget()
 			if !ok {
@@ -107,6 +109,46 @@ func (c *Client) notifyScheduleWatcher(msg *store.Message) {
 		return
 	}
 	go c.scheduler.OnContactMessage(context.Background(), msg.ChatJID, msg.IsFromMe, msg.Content, msg.Timestamp)
+}
+
+// notifyScheduleWatcherMedia feeds messages we CANNOT read (voice notes,
+// photos) to the session watcher. Nothing is written to the messages table —
+// we have no text, and inventing some would corrupt the thread every other
+// feature reads. The watcher only learns that something arrived and what kind.
+func (c *Client) notifyScheduleWatcherMedia(chatJID string, isGroup, isFromMe bool, kind schedule.MediaKind, ts time.Time) {
+	if c.scheduler == nil || isGroup {
+		return
+	}
+	own := c.GetOwnJID()
+	if !own.IsEmpty() && chatJID == types.NewJID(own.User, types.DefaultUserServer).String() {
+		return
+	}
+	go c.scheduler.OnContactMedia(context.Background(), chatJID, isFromMe, kind, ts)
+}
+
+// mediaKindOf names the unreadable message kinds. A voice-note reply to a
+// scheduling proposal is a weekly occurrence; extractText returns "" for it
+// and the session would otherwise sit there looking broken.
+func mediaKindOf(msg *waE2E.Message) (schedule.MediaKind, bool) {
+	if msg == nil {
+		return "", false
+	}
+	switch {
+	case msg.AudioMessage != nil:
+		if msg.AudioMessage.GetPTT() {
+			return schedule.MediaVoice, true
+		}
+		return schedule.MediaAudio, true
+	case msg.ImageMessage != nil:
+		return schedule.MediaImage, true
+	case msg.VideoMessage != nil:
+		return schedule.MediaVideo, true
+	case msg.DocumentMessage != nil:
+		return schedule.MediaDocument, true
+	case msg.StickerMessage != nil:
+		return schedule.MediaSticker, true
+	}
+	return "", false
 }
 
 // scheduleExpiryLoop closes sessions after 48h of silence.
