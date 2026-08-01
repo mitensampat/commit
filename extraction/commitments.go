@@ -266,12 +266,31 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			continue
 		}
 
+		savedTitles := make([][2]string, 0, len(openCommitments)) // [direction, title]
+		for _, oc := range openCommitments {
+			savedTitles = append(savedTitles, [2]string{oc.Direction, oc.Title})
+		}
 		for _, ec := range result.Commitments {
 			sig := ec.Significance
 			if sig != "high" && sig != "medium" && sig != "low" {
 				sig = "medium"
 			}
 			if sig == "low" {
+				continue
+			}
+			// Save-time dedupe: hash-based INSERT OR IGNORE only catches
+			// byte-identical titles; paraphrased re-extractions of the same
+			// promise get fresh IDs. Skip anything title-similar to an open
+			// commitment in this chat (or one saved earlier in this batch).
+			dupe := false
+			for _, st := range savedTitles {
+				if st[0] == ec.Direction && store.TitlesSimilar(st[1], ec.Title, 0.5) {
+					dupe = true
+					break
+				}
+			}
+			if dupe {
+				log.Printf("skipping near-duplicate commitment in %s: %q", chatJID, ec.Title)
 				continue
 			}
 			c := &store.Commitment{
@@ -301,6 +320,8 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 			}
 			if err := e.db.SaveCommitment(c); err != nil {
 				log.Printf("save commitment error: %v", err)
+			} else {
+				savedTitles = append(savedTitles, [2]string{c.Direction, c.Title})
 			}
 		}
 
@@ -326,7 +347,7 @@ func (e *Extractor) ProcessBatch(ctx context.Context) error {
 
 func (e *Extractor) extractFromChat(ctx context.Context, apiKey string, msgs []*store.Message, openCommitments []*store.Commitment) (*extractionResult, error) {
 	myStyle := e.db.GetMyStyle()
-	prompt := buildExtractionPrompt(msgs, openCommitments, myStyle)
+	prompt := BuildExtractionPrompt(msgs, openCommitments, myStyle)
 	model := e.db.GetModel()
 	response, err := callClaude(ctx, apiKey, model, prompt)
 	if err != nil {
@@ -350,7 +371,10 @@ func (e *Extractor) extractFromChat(ctx context.Context, apiKey string, msgs []*
 	return &result, nil
 }
 
-func buildExtractionPrompt(msgs []*store.Message, openCommitments []*store.Commitment, myStyle string) string {
+// BuildExtractionPrompt renders the production extraction prompt for a batch
+// of messages. Exported so the eval harness (evals/extraction) can replay
+// message batches through the exact prompt the pipeline uses.
+func BuildExtractionPrompt(msgs []*store.Message, openCommitments []*store.Commitment, myStyle string) string {
 	var sb strings.Builder
 	sb.WriteString(`Analyze these WhatsApp messages. Do two things:
 
@@ -358,8 +382,29 @@ func buildExtractionPrompt(msgs []*store.Message, openCommitments []*store.Commi
 
 The user is a CEO. Only surface commitments that would matter to a sharp executive assistant — things that, if dropped, would damage a relationship, miss a deadline, lose money, or block someone important. Think: "Would this be embarrassing if forgotten?"
 
+THE CONSEQUENCE TEST — apply to every candidate before extracting. You must be able to answer BOTH:
+1. WHO is waiting on this? (a specific, named person or group)
+2. WHAT breaks if it's forgotten? (a missed deadline, lost money, a blocked person, or real relationship damage)
+If you cannot answer both concretely, do NOT extract. "It would be polite to follow up" is not a consequence.
+
+PROTECTED CLASS — overrides the consequence test. A commitment in ANY of these domains is ALWAYS a real commitment and MUST be extracted, even when no deadline or explicit consequence is stated. For these, the significance IS the consequence — never drop one for being undated:
+- Financing and fundraising (rounds, term sheets, allocations, investor commitments, wires)
+- Board matters (board decks, resolutions, approvals, board communications)
+- Legal and regulatory (contracts, agreements, filings, compliance actions, signatures/approvals on legal docs)
+- Investor paperwork (secondary offerings, share transfers, cap-table changes)
+- Equity / ESOP (grants, option paperwork, vesting, allocations)
+- Signatures or approvals on any of the above
+- Payment / wire obligations (paying, transferring, or releasing money)
+A concrete deliverable, signature, or approval in one of these domains is HIGH significance and gets extracted whether or not a date is attached. This rule does NOT rescue vagueness: "we should talk about the round sometime" is still a vague agreement (no concrete deliverable) and is NOT extracted — the protected class only covers a specific action/deliverable/signature, never a mere intention to discuss.
+
+WORKED EXAMPLES:
+- [ME]: "Can you sign the secondary-offering documents? We'll sort the 1,600-share gap separately." → EXTRACT: title "Sign secondary-offering documents (gap shares deferred)", direction you_owe, significance high. (Protected class: investor paperwork/signature — undated but mandatory.)
+- Founder: "Sharing the board deck for next quarter, please review the infra section." with the deck attached → EXTRACT: title "Review infra section of Q-next board deck for Founder", significance high. (Protected class: board matter — no date needed.)
+- [ME]: "We should catch up on the fundraise sometime." → DO NOT EXTRACT. No concrete deliverable, signature, or action — a vague agreement even though it names a protected domain.
+- Colleague: "will revert on this" / "let me look into it" / "will circle back" → DO NOT EXTRACT. Vague agreement, no deliverable, regardless of topic.
+
 For each new commitment, return:
-- title: short, specific description (not "Call X" — say what the call is about if known)
+- title: short, specific, and SELF-CONTAINED — it must make sense two weeks later with no chat context. Name the deliverable and the counterparty ("Share final ESOP deck with Kunal", not "Send the deck"; "Intro Priya to the Series-B lead at Fund X", not "Make the intro"). Never use bare pronouns ("send it to him")
 - context: one sentence explaining the situation and stakes
 - direction: "you_owe" if the user (messages marked [ME]) made the promise, "they_owe" if someone else did
 - source_quote: the exact message text that contains the commitment
@@ -376,7 +421,7 @@ DO NOT EXTRACT — these are not commitments at all:
 - Social pleasantries: "I'll come say hi", "let's catch up sometime", "will come soon", "see you there"
 - Conversational filler: "let me check", "I'll get back to you", "will do", "noted", "sure", "ok will do"
 - Callback promises: "I'll call you back", "will call you when I land", "call you in a bit", "will revert", "let me get back to you"
-- Vague agreements: "will do something", "will try", "will see", "will look into it", "will check"
+- Vague agreements: "will do something", "will try", "will see", "will look into it", "will check", "will revert", "will align on this", "will figure it out", "will drive prio on this" — ANY promise without a concrete, named deliverable is a vague agreement and is DROPPED, even when it touches an important or protected-class topic. Topic importance never upgrades a vague intention into a commitment; only a concrete deliverable, signature, or approval does
 - Questions or requests without agreement: "can you...?", "would you mind...?"
 - Offers or suggestions without commitment: "I could...", "maybe we should..."
 - Greetings, reactions, emotional messages, thank-yous
@@ -385,6 +430,9 @@ DO NOT EXTRACT — these are not commitments at all:
 - Promises where the person is unknown/unidentifiable
 - Ephemeral micro-coordination: "I'll call you in 2 mins", "coming now", "on my way", "reaching in 10"
 - Generic follow-ups with no specific deliverable: "will follow up", "will circle back", "will touch base"
+- Meeting/event/call ATTENDANCE: "I'll join the call", "will attend the leadership meeting every Tuesday", "see you at the board dinner" — showing up is the calendar's job, not a commitment. Only extract a DELIVERABLE promised for a meeting ("I'll bring the revised forecast to Tuesday's meeting"), never the attendance itself
+- Scheduling logistics: agreeing on a time, moving a meeting, "does 3pm work?", sending an invite
+- DUPLICATES of existing open commitments (listed below, when present): if a message restates, paraphrases, confirms, or nudges an already-tracked promise — even in different words or from a different participant — do NOT extract it again
 - Messages in any language follow the same rules
 
 The bar: if a CEO wouldn't track this on a sticky note, don't extract it. When in doubt, do NOT extract. An empty list is better than a noisy one.
