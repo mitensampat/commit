@@ -303,6 +303,22 @@ THE CONSEQUENCE TEST — apply to every candidate before extracting. You must be
 2. WHAT breaks if it's forgotten? (a missed deadline, lost money, a blocked person, or real relationship damage)
 If you cannot answer both concretely, do NOT extract. "It would be polite to follow up" is not a consequence.
 
+PROTECTED CLASS — overrides the consequence test. A commitment in ANY of these domains is ALWAYS a real commitment and MUST be extracted, even when no deadline or explicit consequence is stated. For these, the significance IS the consequence — never drop one for being undated:
+- Financing and fundraising (rounds, term sheets, allocations, investor commitments, wires)
+- Board matters (board decks, resolutions, approvals, board communications)
+- Legal and regulatory (contracts, agreements, filings, compliance actions, signatures/approvals on legal docs)
+- Investor paperwork (secondary offerings, share transfers, cap-table changes)
+- Equity / ESOP (grants, option paperwork, vesting, allocations)
+- Signatures or approvals on any of the above
+- Payment / wire obligations (paying, transferring, or releasing money)
+A concrete deliverable, signature, or approval in one of these domains is HIGH significance and gets extracted whether or not a date is attached. This rule does NOT rescue vagueness: "we should talk about the round sometime" is still a vague agreement (no concrete deliverable) and is NOT extracted — the protected class only covers a specific action/deliverable/signature, never a mere intention to discuss.
+
+WORKED EXAMPLES:
+- [ME]: "Can you sign the secondary-offering documents? We'll sort the 1,600-share gap separately." → EXTRACT: title "Sign secondary-offering documents (gap shares deferred)", direction you_owe, significance high. (Protected class: investor paperwork/signature — undated but mandatory.)
+- Founder: "Sharing the board deck for next quarter, please review the infra section." with the deck attached → EXTRACT: title "Review infra section of Q-next board deck for Founder", significance high. (Protected class: board matter — no date needed.)
+- [ME]: "We should catch up on the fundraise sometime." → DO NOT EXTRACT. No concrete deliverable, signature, or action — a vague agreement even though it names a protected domain.
+- Colleague: "will revert on this" / "let me look into it" / "will circle back" → DO NOT EXTRACT. Vague agreement, no deliverable, regardless of topic.
+
 For each new commitment, return:
 - title: short, specific, and SELF-CONTAINED — it must make sense two weeks later with no chat context. Name the deliverable and the counterparty ("Share final ESOP deck with Kunal", not "Send the deck"; "Intro Priya to the Series-B lead at Fund X", not "Make the intro"). Never use bare pronouns ("send it to him")
 - context: one sentence explaining the situation and stakes
@@ -321,7 +337,7 @@ DO NOT EXTRACT — these are not commitments at all:
 - Social pleasantries: "I'll come say hi", "let's catch up sometime", "will come soon", "see you there"
 - Conversational filler: "let me check", "I'll get back to you", "will do", "noted", "sure", "ok will do"
 - Callback promises: "I'll call you back", "will call you when I land", "call you in a bit", "will revert", "let me get back to you"
-- Vague agreements: "will do something", "will try", "will see", "will look into it", "will check"
+- Vague agreements: "will do something", "will try", "will see", "will look into it", "will check", "will revert", "will align on this", "will figure it out", "will drive prio on this" — ANY promise without a concrete, named deliverable is a vague agreement and is DROPPED, even when it touches an important or protected-class topic. Topic importance never upgrades a vague intention into a commitment; only a concrete deliverable, signature, or approval does
 - Questions or requests without agreement: "can you...?", "would you mind...?"
 - Offers or suggestions without commitment: "I could...", "maybe we should..."
 - Greetings, reactions, emotional messages, thank-yous
