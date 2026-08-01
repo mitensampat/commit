@@ -743,13 +743,6 @@ func BuildResolutionPrompt(msgs []*store.Message, commitments []*store.Commitmen
 	return buildResolutionPrompt(msgs, commitments)
 }
 
-func CallClaude(ctx context.Context, apiKey, model, prompt string) (string, error) {
-	return callClaude(ctx, apiKey, model, prompt)
-}
-
-func ExtractJSON(s string) string {
-	return extractJSON(s)
-}
 
 func groupMessagesByChat(msgs []*store.Message) map[string][]*store.Message {
 	grouped := make(map[string][]*store.Message)
