@@ -158,6 +158,30 @@ func (db *DB) LatestMessageTime(chatJID string) (time.Time, bool) {
 	return time.Unix(ts, 0), true
 }
 
+// GetSweptThrough returns the newest message timestamp the resolution sweep
+// had already analyzed for a chat. Persisted, so it survives restarts.
+func (db *DB) GetSweptThrough(chatJID string) (time.Time, bool) {
+	var ts int64
+	err := db.conn.QueryRow(
+		"SELECT swept_through FROM sweep_state WHERE chat_jid = ?", chatJID,
+	).Scan(&ts)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(ts, 0), true
+}
+
+// SetSweptThrough records that the sweep has analyzed a chat up to and
+// including `through` — the newest message present when analysis began, so a
+// message arriving mid-sweep isn't skipped.
+func (db *DB) SetSweptThrough(chatJID string, through time.Time) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO sweep_state (chat_jid, swept_through, swept_at) VALUES (?, ?, ?)
+		 ON CONFLICT(chat_jid) DO UPDATE SET swept_through = excluded.swept_through, swept_at = excluded.swept_at`,
+		chatJID, through.Unix(), time.Now().Unix())
+	return err
+}
+
 func (db *DB) GetRecentMessagesForChat(chatJID string, since time.Time) ([]*Message, error) {
 	rows, err := db.conn.Query(`
 		SELECT id, chat_jid, sender_jid, sender_name, chat_name, content, timestamp, is_from_me, is_group

@@ -30,14 +30,6 @@ type Extractor struct {
 	batchesRun    int
 	msgsProcessed int
 	lastNotifyAt  time.Time
-
-	// sweptAt records the newest message timestamp each chat had the last
-	// time the resolution sweep analyzed it. A chat is only re-analyzed when
-	// a message newer than that has arrived — without this, the sweep re-sent
-	// every chat's whole 48h window to Claude every 15 minutes regardless of
-	// whether anything had changed.
-	sweptMu sync.Mutex
-	sweptAt map[string]time.Time
 }
 
 type DebugStatus struct {
@@ -544,8 +536,9 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 		return nil
 	}
 
-	since := time.Now().Add(-48 * time.Hour)
-	chatJIDs, err := e.db.GetChatsWithRecentOutbound(since)
+	const maxWindow = 48 * time.Hour
+	horizon := time.Now().Add(-maxWindow)
+	chatJIDs, err := e.db.GetChatsWithRecentOutbound(horizon)
 	if err != nil {
 		return fmt.Errorf("get chats: %w", err)
 	}
@@ -554,17 +547,21 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 	queued := 0
 	analyzed := 0
 	skipped := 0
+	var totalIn, totalOut int
 
 	for _, chatJID := range chatJIDs {
+		// Capture the newest message ONCE, up front. Everything downstream —
+		// the skip decision and the watermark write — uses this same value,
+		// so a message that lands mid-sweep can't be recorded as "swept"
+		// without being analyzed.
+		latest, hasLatest := e.db.LatestMessageTime(chatJID)
+
 		// Skip chats with nothing new since we last analyzed them: closures
-		// can only be detected from messages, so an unchanged chat would
-		// produce the identical result at full API cost.
-		latest, ok := e.db.LatestMessageTime(chatJID)
-		if ok {
-			e.sweptMu.Lock()
-			last, seen := e.sweptAt[chatJID]
-			e.sweptMu.Unlock()
-			if seen && !latest.After(last) {
+		// can only be detected from messages, so an unchanged chat produces
+		// the identical verdict at full API cost. The watermark is persisted,
+		// so this holds across restarts.
+		if hasLatest {
+			if last, seen := e.db.GetSweptThrough(chatJID); seen && !latest.After(last) {
 				skipped++
 				continue
 			}
@@ -575,6 +572,20 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 			continue
 		}
 
+		// Bound the message window to when the oldest still-open commitment
+		// was made: earlier messages can neither create nor close it, so
+		// sending them is waste. Capped at 48h for a worst-case bound. This
+		// shrinks the fat calls — the active chats we do re-analyze — not
+		// just the idle ones the watermark skips.
+		since := horizon
+		if oldest := commitments[len(commitments)-1].CreatedAt; oldest.After(since) {
+			// Keep a short lead-in so the model sees the promise in context.
+			lead := oldest.Add(-2 * time.Hour)
+			if lead.After(since) {
+				since = lead
+			}
+		}
+
 		msgs, err := e.db.GetRecentMessagesForChat(chatJID, since)
 		if err != nil || len(msgs) == 0 {
 			continue
@@ -582,7 +593,7 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 
 		analyzed++
 		prompt := buildResolutionPrompt(msgs, commitments)
-		response, err := callClaude(ctx, apiKey, store.FallbackModel, prompt)
+		response, usage, err := callClaudeUsage(ctx, apiKey, store.FallbackModel, prompt)
 		if err != nil {
 			if strings.Contains(err.Error(), "429") {
 				return err
@@ -590,6 +601,8 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 			log.Printf("resolution sweep failed for %s: %v", chatJID, err)
 			continue
 		}
+		totalIn += usage.InputTokens
+		totalOut += usage.OutputTokens
 
 		var result extractionResult
 		jsonStr := extractJSON(response)
@@ -601,21 +614,18 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 		resolved += a
 		queued += q
 
-		// Watermark this chat so it isn't re-analyzed until a newer message
-		// arrives. Recorded only after a successful call, so a transient
-		// failure retries next sweep rather than being silently skipped.
-		if latest, ok := e.db.LatestMessageTime(chatJID); ok {
-			e.sweptMu.Lock()
-			if e.sweptAt == nil {
-				e.sweptAt = map[string]time.Time{}
+		// Watermark through the message present when analysis began (not a
+		// fresh read), and only after a successful call — a transient failure
+		// retries next sweep rather than being silently skipped.
+		if hasLatest {
+			if err := e.db.SetSweptThrough(chatJID, latest); err != nil {
+				log.Printf("sweep watermark write failed for %s: %v", chatJID, err)
 			}
-			e.sweptAt[chatJID] = latest
-			e.sweptMu.Unlock()
 		}
 	}
 
-	log.Printf("resolution sweep: %d analyzed, %d skipped (unchanged) — auto-closed %d, queued %d",
-		analyzed, skipped, resolved, queued)
+	log.Printf("resolution sweep: %d analyzed, %d skipped (unchanged) — %d tokens in / %d out — auto-closed %d, queued %d",
+		analyzed, skipped, totalIn, totalOut, resolved, queued)
 	return nil
 }
 

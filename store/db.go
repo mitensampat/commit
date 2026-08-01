@@ -218,13 +218,25 @@ func (db *DB) migrate() error {
 		)`)
 	}
 
+	if version < 10 {
+		// The resolution sweep re-analyzes a chat only when a message newer
+		// than swept_through has arrived. Persisted (not in-memory) so a
+		// restart doesn't re-send every chat's whole window to Claude — the
+		// bug that drove 131M tokens in a month.
+		db.conn.Exec(`CREATE TABLE IF NOT EXISTS sweep_state (
+			chat_jid       TEXT PRIMARY KEY,
+			swept_through  INTEGER NOT NULL,
+			swept_at       INTEGER NOT NULL
+		)`)
+	}
+
 	// Schedule tables (logical v9) are versioned independently — see
 	// store/schedule.go for why this doesn't gate on schema_version.
 	if err := db.migrateSchedule(); err != nil {
 		return err
 	}
 
-	db.setSchemaVersion(9)
+	db.setSchemaVersion(10)
 	return nil
 }
 
