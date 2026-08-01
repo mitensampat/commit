@@ -26,7 +26,7 @@ import (
 	waTypes "go.mau.fi/whatsmeow/types"
 )
 
-const AppVersion = "1.5.1"
+const AppVersion = "1.5.2"
 
 //go:embed static
 var staticFS embed.FS
