@@ -143,6 +143,21 @@ func (db *DB) GetChatsWithRecentOutbound(since time.Time) ([]string, error) {
 	return jids, rows.Err()
 }
 
+// LatestMessageTime returns the timestamp of the newest message in a chat.
+// The resolution sweep uses it as a watermark: a chat with no message newer
+// than the last sweep has nothing new to detect a closure from, so re-sending
+// its whole 48h window to Claude is pure waste.
+func (db *DB) LatestMessageTime(chatJID string) (time.Time, bool) {
+	var ts int64
+	err := db.conn.QueryRow(
+		"SELECT MAX(timestamp) FROM messages WHERE chat_jid = ?", chatJID,
+	).Scan(&ts)
+	if err != nil || ts == 0 {
+		return time.Time{}, false
+	}
+	return time.Unix(ts, 0), true
+}
+
 func (db *DB) GetRecentMessagesForChat(chatJID string, since time.Time) ([]*Message, error) {
 	rows, err := db.conn.Query(`
 		SELECT id, chat_jid, sender_jid, sender_name, chat_name, content, timestamp, is_from_me, is_group

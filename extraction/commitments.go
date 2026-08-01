@@ -30,6 +30,14 @@ type Extractor struct {
 	batchesRun    int
 	msgsProcessed int
 	lastNotifyAt  time.Time
+
+	// sweptAt records the newest message timestamp each chat had the last
+	// time the resolution sweep analyzed it. A chat is only re-analyzed when
+	// a message newer than that has arrived — without this, the sweep re-sent
+	// every chat's whole 48h window to Claude every 15 minutes regardless of
+	// whether anything had changed.
+	sweptMu sync.Mutex
+	sweptAt map[string]time.Time
 }
 
 type DebugStatus struct {
@@ -542,12 +550,26 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 		return fmt.Errorf("get chats: %w", err)
 	}
 
-	log.Printf("resolution sweep: checking %d chats with recent outbound messages", len(chatJIDs))
 	resolved := 0
-
 	queued := 0
+	analyzed := 0
+	skipped := 0
 
 	for _, chatJID := range chatJIDs {
+		// Skip chats with nothing new since we last analyzed them: closures
+		// can only be detected from messages, so an unchanged chat would
+		// produce the identical result at full API cost.
+		latest, ok := e.db.LatestMessageTime(chatJID)
+		if ok {
+			e.sweptMu.Lock()
+			last, seen := e.sweptAt[chatJID]
+			e.sweptMu.Unlock()
+			if seen && !latest.After(last) {
+				skipped++
+				continue
+			}
+		}
+
 		commitments, err := e.db.GetOpenCommitmentsForChat(chatJID)
 		if err != nil || len(commitments) == 0 {
 			continue
@@ -558,6 +580,7 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 			continue
 		}
 
+		analyzed++
 		prompt := buildResolutionPrompt(msgs, commitments)
 		response, err := callClaude(ctx, apiKey, store.FallbackModel, prompt)
 		if err != nil {
@@ -577,11 +600,22 @@ func (e *Extractor) RunResolutionSweep(ctx context.Context) error {
 		a, q := e.applyClosureDetections(result.closureDetections(), "resolution sweep")
 		resolved += a
 		queued += q
+
+		// Watermark this chat so it isn't re-analyzed until a newer message
+		// arrives. Recorded only after a successful call, so a transient
+		// failure retries next sweep rather than being silently skipped.
+		if latest, ok := e.db.LatestMessageTime(chatJID); ok {
+			e.sweptMu.Lock()
+			if e.sweptAt == nil {
+				e.sweptAt = map[string]time.Time{}
+			}
+			e.sweptAt[chatJID] = latest
+			e.sweptMu.Unlock()
+		}
 	}
 
-	if resolved > 0 || queued > 0 {
-		log.Printf("resolution sweep: auto-closed %d, queued %d for confirmation", resolved, queued)
-	}
+	log.Printf("resolution sweep: %d analyzed, %d skipped (unchanged) — auto-closed %d, queued %d",
+		analyzed, skipped, resolved, queued)
 	return nil
 }
 
