@@ -102,6 +102,18 @@ func (dr *DraftRequest) SelectedSlots() []Slot {
 // GenerateDraft writes the message to the counterpart in the user's texting
 // style. Timezone assumptions must be stated, not hidden (hardening req 5).
 func GenerateDraft(ctx context.Context, creds Creds, dr DraftRequest) (string, error) {
+	prompt := buildDraftPrompt(dr)
+	out, err := callClaude(ctx, creds.APIKey(), creds.Model(), prompt, 512)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// buildDraftPrompt assembles the drafting prompt. Split out from GenerateDraft
+// so the prompt's guarantees (e.g. both-timezone pairing) are testable without
+// the API.
+func buildDraftPrompt(dr DraftRequest) string {
 	loc := dr.Location
 	if loc == nil {
 		loc = time.Local
@@ -124,7 +136,7 @@ CRITICAL: this message CONTINUES an ongoing conversation — the contact just as
 			sb.WriteString("IMPORTANT: they asked for " + dr.RequestedDays + ", but the user is fully booked on those days. The message MUST acknowledge what they asked for, say plainly that those days don't work, and offer the times below as the alternative — apologetic but not grovelling, e.g. \"" + dr.RequestedDays + " are packed for me unfortunately — could any of these work instead?\". Do not pretend these are the days they wanted.\n")
 		}
 		if dr.ContactTZ != "" && dr.ContactTZNote != "" {
-			sb.WriteString("IMPORTANT: The contact may be in a different timezone (" + dr.ContactTZ + ", " + dr.ContactTZNote + "). Give the times in their timezone too, and explicitly state the assumption so they can correct it, e.g. \"that's 8am your side — assuming you're in SF?\".\n")
+			sb.WriteString("IMPORTANT — the contact is likely in a different timezone (" + dr.ContactTZNote + "). Every time you mention MUST show BOTH clocks, never just one: lead with the user's own time, then the contact's in parentheses. Two lists are given below — pair them. Example of the required format: \"Tue 8:30pm my time (8am yours) or Wed 9pm (8:30am yours) — assuming you're in SF, tell me if not\". Do NOT show only the contact's time; the user needs to see their own clock to keep track.\n")
 		}
 	}
 	sb.WriteString("\nContact: " + dr.ContactName + "\nTopic: " + dr.Topic + "\n")
@@ -132,13 +144,13 @@ CRITICAL: this message CONTINUES an ongoing conversation — the contact just as
 		sb.WriteString("Format: " + dr.Format + "\n")
 	}
 	if !dr.Cancel {
-		sb.WriteString("Times (user's timezone, " + loc.String() + "):\n")
+		sb.WriteString("Times in the USER's timezone (" + loc.String() + ") — lead with these:\n")
 		for i, s := range dr.SelectedSlots() {
 			sb.WriteString(formatSlotLine(i, s, loc) + "\n")
 		}
 		if dr.ContactTZ != "" {
 			if cloc, err := time.LoadLocation(dr.ContactTZ); err == nil {
-				sb.WriteString("Same times in the contact's assumed timezone (" + dr.ContactTZ + "):\n")
+				sb.WriteString("The SAME times in the CONTACT's timezone (" + dr.ContactTZ + ") — show these in parentheses alongside, never instead:\n")
 				for i, s := range dr.SelectedSlots() {
 					sb.WriteString(formatSlotLine(i, s, cloc) + "\n")
 				}
@@ -159,12 +171,7 @@ CRITICAL: this message CONTINUES an ongoing conversation — the contact just as
 		}
 	}
 	sb.WriteString("\nReturn ONLY the message text, nothing else.")
-
-	out, err := callClaude(ctx, creds.APIKey(), creds.Model(), sb.String(), 512)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
+	return sb.String()
 }
 
 // FormatSlotList renders the numbered options for the self-chat.
