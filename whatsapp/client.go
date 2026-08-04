@@ -91,6 +91,14 @@ func (c *Client) QRChannel() <-chan string {
 	return c.qrChan
 }
 
+// configureClient makes whatsmeow the sole owner of socket reconnection.
+// Connection events below only update application state; they must not start a
+// second reconnect loop that can race whatsmeow's built-in auto-reconnect.
+func (c *Client) configureClient(client *whatsmeow.Client) {
+	client.EnableAutoReconnect = true
+	client.BackgroundEventCtx = c.appCtx
+}
+
 func (c *Client) Connect(ctx context.Context) error {
 	container, err := c.getContainer()
 	if err != nil {
@@ -103,6 +111,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 
 	client := whatsmeow.NewClient(deviceStore, waLog.Noop)
+	c.configureClient(client)
 	c.mu.Lock()
 	c.wa = client
 	c.mu.Unlock()
@@ -156,6 +165,7 @@ func (c *Client) Login(ctx context.Context) (<-chan string, error) {
 
 	deviceStore := container.NewDevice()
 	client := whatsmeow.NewClient(deviceStore, waLog.Noop)
+	c.configureClient(client)
 	client.AddEventHandler(c.handleEvent)
 
 	qrCodes := make(chan string, 5)
@@ -213,42 +223,10 @@ func (c *Client) handleEvent(rawEvt interface{}) {
 		c.connected = true
 		c.mu.Unlock()
 	case *events.Disconnected:
-		log.Println("WhatsApp disconnected")
+		log.Println("WhatsApp disconnected; waiting for whatsmeow auto-reconnect")
 		c.mu.Lock()
 		c.connected = false
-		client := c.wa
 		c.mu.Unlock()
-		if client != nil {
-			go c.reconnect(client)
-		}
-	}
-}
-
-func (c *Client) reconnect(client *whatsmeow.Client) {
-	backoff := 5 * time.Second
-	maxBackoff := 5 * time.Minute
-	for {
-		select {
-		case <-c.appCtx.Done():
-			return
-		case <-time.After(backoff):
-		}
-
-		c.mu.RLock()
-		current := c.wa
-		c.mu.RUnlock()
-		if current != client {
-			return
-		}
-
-		log.Printf("attempting WhatsApp reconnect...")
-		if err := client.Connect(); err != nil {
-			log.Printf("reconnect failed: %v", err)
-			backoff = min(backoff*2, maxBackoff)
-			continue
-		}
-		log.Println("WhatsApp reconnected")
-		return
 	}
 }
 
